@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 易经八字年度运势</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="page">
+    <section class="card">
+      <h1>AI 易经八字年度运势</h1>
+      <p class="subtitle">输入出生信息，自动计算真太阳时与四柱八字，生成今年运势报告。</p>
+
+      <form id="fortune-form">
+        <div class="grid">
+          <label>
+            姓名
+            <input id="full-name" type="text" maxlength="20" placeholder="请输入姓名" required>
+          </label>
+
+          <label>
+            出生日期
+            <input id="birth-date" type="date" required>
+          </label>
+
+          <label>
+            出生时间
+            <input id="birth-time" type="time" required>
+          </label>
+
+          <label>
+            出生国家
+            <select id="country" required></select>
+          </label>
+
+          <label>
+            出生城市
+            <select id="city" required></select>
+          </label>
+
+          <label>
+            时区（自动）
+            <input id="timezone" type="text" readonly>
+          </label>
+
+          <label>
+            经度（自动）
+            <input id="longitude" type="text" readonly>
+          </label>
+
+          <label>
+            纬度（自动）
+            <input id="latitude" type="text" readonly>
+          </label>
+
+          <label>
+            性别（可选）
+            <select id="gender">
+              <option value="">不填写</option>
+              <option value="male">男</option>
+              <option value="female">女</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+
+          <label class="full-row">
+            OpenAI API Key（可选，本地直连）
+            <input id="openai-key" type="password" placeholder="sk-...">
+          </label>
+        </div>
+
+        <button type="submit">生成我的今年运势</button>
+      </form>
+    </section>
+
+    <section class="card hidden" id="result-card">
+      <h2>年度运势报告</h2>
+      <div class="report-actions">
+        <button id="copy-report" type="button">复制纯文本报告</button>
+        <span id="validation-badge" class="badge">算法验证未运行</span>
+      </div>
+      <article id="result-content"></article>
+      <section class="report-section hidden" id="ai-section">
+        <h3>AI 增强解读</h3>
+        <p id="ai-content"></p>
+      </section>
+    </section>
+  </main>
+  <script src="./script.js"></script>
+</body>
+</html>

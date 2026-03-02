@@ -1,0 +1,129 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: radial-gradient(circle at top, #f8edd3 0%, #efe1bf 40%, #e6d5ac 100%);
+  color: #2f2416;
+}
+
+.page {
+  max-width: 980px;
+  margin: 24px auto;
+  padding: 0 16px 24px;
+}
+
+.card {
+  background: rgba(255, 251, 240, 0.92);
+  border: 1px solid #dac79d;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(80, 52, 17, 0.12);
+  margin-bottom: 16px;
+}
+
+h1, h2, h3 {
+  margin-top: 0;
+}
+
+.subtitle {
+  color: #6a5635;
+  margin-bottom: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: #4a3a23;
+}
+
+input, select, button {
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1px solid #c7b085;
+  padding: 10px;
+  background: #fffdf7;
+}
+
+button {
+  margin-top: 14px;
+  background: linear-gradient(135deg, #8e652b, #b8833e);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.06);
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.report-actions button {
+  margin-top: 0;
+}
+
+.hidden {
+  display: none;
+}
+
+.report-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #ceb98e;
+}
+
+.pillars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.pillars div {
+  background: #f6ecd1;
+  border: 1px solid #d2bf97;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.full-row {
+  grid-column: 1 / -1;
+}
+
+.badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid #d2bf97;
+  background: #f6ecd1;
+  color: #5b4527;
+}
+
+.badge.ok {
+  background: #e7f5e9;
+  border-color: #9ac8a2;
+  color: #1f6b2a;
+}
+
+.badge.fail {
+  background: #ffeaea;
+  border-color: #e0a5a5;
+  color: #8b2222;
+}
