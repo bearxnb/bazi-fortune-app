@@ -59,20 +59,27 @@ const RAW_CHINA_TOP50 = [
 
 const CITY_DB = {
   "中国": buildSortedChinaTop50(),
-  "台湾": [
-    { city: "台北", pinyin: "tai bei", tz: "Asia/Taipei", lat: 25.033, lon: 121.5654 },
-    { city: "台中", pinyin: "tai zhong", tz: "Asia/Taipei", lat: 24.1477, lon: 120.6736 },
-    { city: "台南", pinyin: "tai nan", tz: "Asia/Taipei", lat: 22.9997, lon: 120.227 },
-    { city: "新北", pinyin: "xin bei", tz: "Asia/Taipei", lat: 25.012, lon: 121.4657 },
-    { city: "桃园", pinyin: "tao yuan", tz: "Asia/Taipei", lat: 24.9936, lon: 121.301 },
-    { city: "高雄", pinyin: "gao xiong", tz: "Asia/Taipei", lat: 22.6273, lon: 120.3014 }
-  ],
   "美国": [
+    { city: "New York", pinyin: "new york", tz: "America/New_York", lat: 40.7128, lon: -74.006 },
+    { city: "Los Angeles", pinyin: "los angeles", tz: "America/Los_Angeles", lat: 34.0522, lon: -118.2437 },
     { city: "Chicago", pinyin: "chicago", tz: "America/Chicago", lat: 41.8781, lon: -87.6298 },
     { city: "Houston", pinyin: "houston", tz: "America/Chicago", lat: 29.7604, lon: -95.3698 },
-    { city: "Los Angeles", pinyin: "los angeles", tz: "America/Los_Angeles", lat: 34.0522, lon: -118.2437 },
-    { city: "New York", pinyin: "new york", tz: "America/New_York", lat: 40.7128, lon: -74.006 },
-    { city: "Seattle", pinyin: "seattle", tz: "America/Los_Angeles", lat: 47.6062, lon: -122.3321 }
+    { city: "Phoenix", pinyin: "phoenix", tz: "America/Phoenix", lat: 33.4484, lon: -112.074 },
+    { city: "Philadelphia", pinyin: "philadelphia", tz: "America/New_York", lat: 39.9526, lon: -75.1652 },
+    { city: "San Antonio", pinyin: "san antonio", tz: "America/Chicago", lat: 29.4241, lon: -98.4936 },
+    { city: "San Diego", pinyin: "san diego", tz: "America/Los_Angeles", lat: 32.7157, lon: -117.1611 },
+    { city: "Dallas", pinyin: "dallas", tz: "America/Chicago", lat: 32.7767, lon: -96.797 },
+    { city: "Jacksonville", pinyin: "jacksonville", tz: "America/New_York", lat: 30.3322, lon: -81.6557 },
+    { city: "Austin", pinyin: "austin", tz: "America/Chicago", lat: 30.2672, lon: -97.7431 },
+    { city: "Fort Worth", pinyin: "fort worth", tz: "America/Chicago", lat: 32.7555, lon: -97.3308 },
+    { city: "San Jose", pinyin: "san jose", tz: "America/Los_Angeles", lat: 37.3382, lon: -121.8863 },
+    { city: "Columbus", pinyin: "columbus", tz: "America/New_York", lat: 39.9612, lon: -82.9988 },
+    { city: "Charlotte", pinyin: "charlotte", tz: "America/New_York", lat: 35.2271, lon: -80.8431 },
+    { city: "Indianapolis", pinyin: "indianapolis", tz: "America/Indiana/Indianapolis", lat: 39.7684, lon: -86.1581 },
+    { city: "Seattle", pinyin: "seattle", tz: "America/Los_Angeles", lat: 47.6062, lon: -122.3321 },
+    { city: "Denver", pinyin: "denver", tz: "America/Denver", lat: 39.7392, lon: -104.9903 },
+    { city: "Washington", pinyin: "washington", tz: "America/New_York", lat: 38.9072, lon: -77.0369 },
+    { city: "Boston", pinyin: "boston", tz: "America/New_York", lat: 42.3601, lon: -71.0589 }
   ],
   "日本": [
     { city: "Osaka", pinyin: "osaka", tz: "Asia/Tokyo", lat: 34.6937, lon: 135.5023 },
@@ -185,7 +192,7 @@ form.addEventListener("submit", async (e) => {
   const bazi = calcBazi(trueSolarDate);
   const nameAnalysis = analyzeNameWuxing(fullName);
   const lifeAnalysis = analyzeLifeElements(bazi, nameAnalysis);
-  const annual = calcAnnualFortune(bazi, new Date().getFullYear(), gender, lifeAnalysis);
+  const annual = calcAnnualFortune(bazi, new Date().getFullYear(), gender, lifeAnalysis, nameAnalysis);
 
   const ctx = {
     fullName,
@@ -507,9 +514,20 @@ function analyzeLifeElements(bazi, nameAnalysis) {
   const ratio = bazi.elementRatio;
   const dominant = [...ELEMENTS].sort((a, b) => counts[b] - counts[a])[0];
   const weak = [...ELEMENTS].sort((a, b) => counts[a] - counts[b])[0];
+  const supportElement = getGeneratingSource(dayMaster);
+  const wealthElement = getControlledTarget(dayMaster);
+  const pressureElement = getControllerSource(dayMaster);
+  const outputElement = getGeneratedTarget(dayMaster);
 
-  const lifeText = buildLifeElementText(dayMaster, dominant, weak, ratio);
-  const personalityText = buildPersonalityText(dayMaster, dominant, weak);
+  const supportPower = counts[dayMaster] + counts[supportElement];
+  const pressurePower = counts[pressureElement];
+  const outputPower = counts[outputElement];
+  const wealthPower = counts[wealthElement];
+  const monthElement = bazi.pillars.month.branchElement;
+  const structureType = classifyStructure(supportPower, pressurePower, outputPower);
+
+  const lifeText = buildLifeElementText(dayMaster, dominant, weak, ratio, structureType, supportElement);
+  const personalityText = buildPersonalityText(dayMaster, dominant, weak, outputPower, pressurePower);
   const nameLinkText = buildNameLinkText(nameAnalysis, weak, dominant);
 
   return {
@@ -517,17 +535,27 @@ function analyzeLifeElements(bazi, nameAnalysis) {
     dominant,
     weak,
     ratio,
+    supportElement,
+    wealthElement,
+    pressureElement,
+    outputElement,
+    monthElement,
+    supportPower,
+    pressurePower,
+    outputPower,
+    wealthPower,
+    structureType,
     lifeText,
     personalityText,
     nameLinkText
   };
 }
 
-function buildLifeElementText(dayMaster, dominant, weak, ratio) {
-  return `你的日主为${dayMaster}，命盘五行比例为 木${ratio["木"]}% 火${ratio["火"]}% 土${ratio["土"]}% 金${ratio["金"]}% 水${ratio["水"]}%。整体呈现${dominant}偏旺、${weak}偏弱的结构。命局偏旺时适合主动突破，命局偏弱位则需要靠节奏管理和环境补益来平衡。`;
+function buildLifeElementText(dayMaster, dominant, weak, ratio, structureType, supportElement) {
+  return `你的日主为${dayMaster}，命盘五行比例为 木${ratio["木"]}% 火${ratio["火"]}% 土${ratio["土"]}% 金${ratio["金"]}% 水${ratio["水"]}%。整体呈现${dominant}偏旺、${weak}偏弱。结构上属于“${structureType}”类型，代表你更依赖${supportElement}来补气，决策上宜先保稳定再做扩张。`;
 }
 
-function buildPersonalityText(dayMaster, dominant, weak) {
+function buildPersonalityText(dayMaster, dominant, weak, outputPower, pressurePower) {
   const dayMasterTraits = {
     木: "重成长、讲原则，行动有方向感",
     火: "表达力强、感染力高，重视被看见",
@@ -535,32 +563,36 @@ function buildPersonalityText(dayMaster, dominant, weak) {
     金: "逻辑清晰、执行果断，标准意识高",
     水: "感受力和洞察力强，擅长应变"
   };
-  return `性格底色：${dayMasterTraits[dayMaster]}。当前${dominant}旺会放大你的优势，但也容易过度用力；${weak}弱时容易在该维度出现后劲不足，建议以“先定节奏、再拉强度”的方式做长期规划。`;
+  const outputHint = outputPower >= 2 ? "表达和输出欲较强，适合把想法转成作品/成果。" : "输出节奏偏谨慎，先打磨再公开会更稳。";
+  const pressureHint = pressurePower >= 2 ? "外部期待感较重，容易自我加压。" : "外部压力可控，更适合按自己的节奏推进。";
+  return `性格底色：${dayMasterTraits[dayMaster]}。${outputHint}${pressureHint} 当前${dominant}旺会放大优势，但${weak}弱环节仍是你长期稳定性的关键。`;
 }
 
 function buildNameLinkText(nameAnalysis, weak, dominant) {
   if (!nameAnalysis.chars.length) {
     return "姓名未识别到可分析字符，姓名五行联动分析已跳过。";
   }
-  const strengthen = nameAnalysis.counts[weak] > 0 ? "有直接补益" : "补益有限";
-  const overBoost = nameAnalysis.counts[dominant] > 0 ? "会继续增强命局强势项" : "不会额外放大命局强势项";
-  return `姓名五行与命局联动：对命局偏弱的${weak}${strengthen}，并且${overBoost}。用于品牌名/社媒名时，可优先保留补弱元素。`;
+  const weakBoost = nameAnalysis.counts[weak];
+  const dominantBoost = nameAnalysis.counts[dominant];
+  const weakDesc = weakBoost >= 2 ? `对你偏弱的${weak}补益较强` : weakBoost === 1 ? `对偏弱的${weak}有一定补益` : `对偏弱的${weak}补益有限`;
+  const dominantDesc = dominantBoost >= 2 ? `同时明显放大${dominant}强势项` : dominantBoost === 1 ? `并轻微增强${dominant}强势项` : `且不会额外放大${dominant}强势项`;
+  return `姓名五行与命局联动：${weakDesc}，${dominantDesc}。在对外昵称或品牌名上，可优先保留补弱字。`;
 }
 
-function calcAnnualFortune(bazi, targetYear, gender, lifeAnalysis) {
+function calcAnnualFortune(bazi, targetYear, gender, lifeAnalysis, nameAnalysis) {
   const yearPillar = getYearPillar(targetYear, 6, 1);
   const dayMaster = bazi.pillars.day.stemElement;
   const relation = getElementRelation(dayMaster, yearPillar.stemElement);
   const strengthHint = bazi.elementCount[dayMaster] >= 2 ? "偏强" : "偏弱";
+  const profile = buildFortuneProfile(bazi, yearPillar, lifeAnalysis, nameAnalysis, relation);
 
-  const career = buildCareerText(relation, strengthHint, lifeAnalysis.dominant, lifeAnalysis.weak);
-  const love = buildLoveText(relation, gender, lifeAnalysis.dominant);
-  const health = buildHealthText(lifeAnalysis.weak, lifeAnalysis.dominant);
-  const wealth = buildWealthText(relation, lifeAnalysis.weak);
-  const actions = buildActionSuggestions(dayMaster, lifeAnalysis.weak);
-  const cautions = buildCautions(lifeAnalysis.dominant, lifeAnalysis.weak);
+  const career = buildCareerText(relation, strengthHint, lifeAnalysis, profile);
+  const love = buildLoveText(relation, gender, lifeAnalysis, profile);
+  const health = buildHealthText(lifeAnalysis, profile);
+  const wealth = buildWealthText(relation, lifeAnalysis, profile);
+  const actions = buildActionSuggestions(dayMaster, lifeAnalysis, profile);
   const yearOverview = build2026Overview(targetYear);
-  const personalBridge = buildPersonalYearBridge(relation, yearPillar, lifeAnalysis);
+  const personalBridge = buildPersonalYearBridge(relation, yearPillar, lifeAnalysis, profile);
 
   return {
     targetYear,
@@ -570,12 +602,12 @@ function calcAnnualFortune(bazi, targetYear, gender, lifeAnalysis) {
     strengthHint,
     yearOverview,
     personalBridge,
+    evidencePoints: profile.evidencePoints,
     career,
     love,
     health,
     wealth,
-    actions,
-    cautions
+    actions
   };
 }
 
@@ -587,8 +619,11 @@ function build2026Overview(targetYear) {
   return `${targetYear} 年为${yPillar.text}年，整体趋势会围绕${yPillar.stemElement}元素展开，主旋律是把优势变成可兑现结果。`;
 }
 
-function buildPersonalYearBridge(relation, yearPillar, lifeAnalysis) {
-  return `你的个人流年与大势的连接点是“${relation}”（你的日主对流年天干${yearPillar.stem}）。这意味着你在${lifeAnalysis.dominant}相关能力上更容易放大成果，但也要用${lifeAnalysis.weak}维度做稳定器，避免高开低走。`;
+function buildPersonalYearBridge(relation, yearPillar, lifeAnalysis, profile) {
+  const branchHint = profile.clashCount > 0
+    ? `流年地支${yearPillar.branch}与你命盘出现${profile.clashCount}处冲动位，说明“变动”会先于“稳定”。`
+    : `流年地支${yearPillar.branch}与命盘冲动位较少，适合走“稳扎稳打”的长期路线。`;
+  return `你的个人流年与大势连接点是“${relation}”（日主对流年天干${yearPillar.stem}）。${branchHint} 你在${lifeAnalysis.dominant}相关能力上更容易放大成果，但要用${lifeAnalysis.weak}做稳定器，避免高开低走。`;
 }
 
 function getElementRelation(selfElement, otherElement) {
@@ -601,60 +636,257 @@ function getElementRelation(selfElement, otherElement) {
   return "受制";
 }
 
-function buildCareerText(relation, strengthHint, strongest, weakest) {
-  const base = {
-    比和: "今年事业更看重团队协同与资源整合，适合横向拓展人脉和项目。",
-    泄秀: "今年适合输出能力与品牌曝光，做作品、做内容、做方法论会更容易出圈。",
-    生扶: "今年贵人运较明显，适合争取内部提拔、关键客户背书与跨部门支持。",
-    克财: "今年冲业绩能力强，但压力也更大，适合结果导向型岗位与硬目标冲刺。",
-    受制: "今年容易遇到流程和规则阻力，建议先稳住基本盘，再分阶段突破。"
-  }[relation];
-  return `${base} 你的命局日主${strengthHint}，当前五行以${strongest}偏旺、${weakest}偏弱，做决策时要避免“单点猛冲”，改为“主线+备份方案”会更稳。`;
+function buildCareerText(relation, strengthHint, lifeAnalysis, profile) {
+  const base = seededChoice(
+    profile,
+    "career-base",
+    {
+      比和: [
+        "今年事业重心在“协同放大”，越会借力团队资源越容易出成绩。",
+        "事业上更适合走整合路线，把你擅长的模块串成完整方案会更吃香。"
+      ],
+      泄秀: [
+        "今年是输出年，公开表达、作品化沉淀、对外展示都会直接影响机会密度。",
+        "事业关键词是“被看见”，把专业转成可展示成果会明显提速。"
+      ],
+      生扶: [
+        "今年贵人与平台资源更容易对接到你，适合争取关键项目席位。",
+        "事业上有“被托举”特征，主动连接导师型或平台型资源会更顺。"
+      ],
+      克财: [
+        "今年是结果导向年，扛指标、拿结果、做转化的能力会被重点考核。",
+        "你在高目标场景更容易被看见，但也要防止过度透支。"
+      ],
+      受制: [
+        "今年事业阻力来自规则和流程，先稳主线再扩张会更安全。",
+        "在制度约束较强的环境里，分阶段推进比一次性猛冲更有效。"
+      ]
+    }[relation]
+  );
+  const modeHint = lifeAnalysis.outputPower >= 2
+    ? seededChoice(profile, "career-mode-strong", [
+      "你本命输出星有力，适合承担对外表达、业务开拓、内容交付类职责。",
+      "输出星偏强，适合把“表达+执行”捆绑成你的核心竞争力。"
+    ])
+    : seededChoice(profile, "career-mode-weak", [
+      "你本命输出星偏谨慎，适合先打磨专业深度，再争取关键曝光。",
+      "输出节奏宜先内功后出圈，先做可复用方法再扩大影响。"
+    ]);
+  const changeHint = profile.clashCount > 0
+    ? seededChoice(profile, "career-change", [
+      "流年冲动位偏多，岗位调整、组织变化或合作洗牌概率更高，要留好B计划。",
+      "今年变动信号明显，职业路径建议准备“主方案+备选方案”。"
+    ])
+    : seededChoice(profile, "career-stable", [
+      "流年结构偏稳，适合在现有平台深耕，逐步抬升职级和议价权。",
+      "今年稳定度较好，适合深耕一个赛道并持续加码核心筹码。"
+    ]);
+  const focusHint = seededChoice(profile, "career-focus", [
+    "建议采用“主线目标+季度复盘”推进节奏。",
+    "建议按“季度主题+周执行指标”落地。",
+    "建议以“一个核心战场 + 两个辅助抓手”配置精力。"
+  ]);
+  return `${base} ${modeHint}${changeHint} 命局日主${strengthHint}，当前${lifeAnalysis.dominant}偏旺、${lifeAnalysis.weak}偏弱，${focusHint}`;
 }
 
-function buildLoveText(relation, gender, strongest) {
+function buildLoveText(relation, gender, lifeAnalysis, profile) {
   let genderHint = "";
   if (gender === "male") genderHint = "男性视角下，今年更适合用行动感建立安全感。";
   if (gender === "female") genderHint = "女性视角下，今年更适合明确边界与节奏，避免情绪内耗。";
-  const relationHint = relation === "比和"
-    ? "感情关系重在价值观一致。"
-    : relation === "生扶"
-      ? "容易遇到愿意支持你成长的人。"
-      : "亲密关系要多做沟通确认，别用猜测代替表达。";
-  return `${relationHint}${genderHint} 命局${strongest}气较重时，表达方式会更直接，记得保留倾听空间。`;
+  const relationHint = seededChoice(
+    profile,
+    "love-relation",
+    relation === "比和"
+      ? ["感情关系重在价值观一致和生活节奏匹配。", "今年更看“同频感”，价值观是否一致会直接影响关系质量。"]
+      : relation === "生扶"
+        ? ["容易遇到愿意支持你成长的人。", "关系里更容易出现互相托举的正向反馈。"]
+        : ["亲密关系要多做沟通确认，别用猜测代替表达。", "关系波动多来自信息不对称，建议把需求讲清楚。"]
+  );
+  const branchHint = profile.dayBranchClashed
+    ? seededChoice(profile, "love-clash", [
+      "今年日支受流年冲动，感情节奏变化更明显，异地或时间冲突要提前沟通。",
+      "流年冲到夫妻宫位，关系容易进入“重新谈规则”的阶段。"
+    ])
+    : seededChoice(profile, "love-steady", [
+      "今年日支相对稳定，适合通过共同目标把关系做深。",
+      "关系稳定度较好，适合做长期规划和关键承诺。"
+    ]);
+  const styleHint = seededChoice(profile, "love-style", [
+    `命局${lifeAnalysis.dominant}气较重时表达会更直接，记得给对方留出反馈空间。`,
+    `你在关系里推进速度偏快，建议给彼此保留“对齐节奏”的缓冲区。`,
+    `今年关系经营关键在“先确认再推进”，避免用想象代替共识。`
+  ]);
+  return `${relationHint}${genderHint} ${branchHint} ${styleHint}`;
 }
 
-function buildHealthText(weakest, strongest) {
+function buildHealthText(lifeAnalysis, profile) {
   const map = { 木: "肝胆与情绪调节", 火: "心血管与睡眠", 土: "脾胃与代谢", 金: "呼吸系统与皮肤", 水: "肾气与泌尿系统" };
-  return `今年重点关注${map[weakest]}，这是你的相对薄弱位；${map[strongest]}属于易过载位，避免长期熬夜、暴饮暴食或过度训练。建议至少每季度做一次体检指标复盘。`;
+  const seasonHint = lifeAnalysis.monthElement === lifeAnalysis.weak
+    ? "月令也落在偏弱元素，说明该系统更容易在季节转换时波动。"
+    : `月令主气为${lifeAnalysis.monthElement}，与偏弱位不完全重叠，恢复空间较好。`;
+  const stressHint = profile.clashCount >= 2
+    ? seededChoice(profile, "health-stress-high", [
+      "流年冲动位较多，压力型失眠和情绪波动要重点管理。",
+      "变动压力偏高，神经系统与睡眠节律要重点保护。"
+    ])
+    : seededChoice(profile, "health-stress-low", [
+      "流年冲动位较少，重点在长期作息一致性。",
+      "压力相对可控，关键是把基础作息守稳。"
+    ]);
+  const actHint = seededChoice(profile, "health-action", [
+    "建议每季度复盘体检指标。",
+    "建议每 3 个月复盘一次体能和睡眠数据。",
+    "建议建立“睡眠-饮食-运动”三项周追踪。"
+  ]);
+  return `今年重点关注${map[lifeAnalysis.weak]}，这是你的相对薄弱位；${map[lifeAnalysis.dominant]}属于易过载位。${seasonHint}${stressHint} ${actHint}`;
 }
 
-function buildWealthText(relation, weakest) {
-  const text = relation === "克财"
-    ? "财务机会来自高压项目与高责任岗位，但风险和回撤也更明显。"
-    : relation === "生扶"
-      ? "财务增长偏稳，适合通过主业能力升级带动收入上行。"
-      : "财务节奏以“稳中求进”为主，先管住现金流再追求收益率。";
-  return `${text} ${weakest}偏弱提示你今年要特别重视预算纪律和风险分散，不建议重仓单一资产。`;
+function buildWealthText(relation, lifeAnalysis, profile) {
+  const text = seededChoice(
+    profile,
+    "wealth-base",
+    relation === "克财"
+      ? ["财务机会来自高压项目与高责任岗位，但波动也更明显。", "收入爆发点在高挑战任务，但回撤风险要同步管理。"]
+      : relation === "生扶"
+        ? ["财务增长偏稳，适合通过主业能力升级带动收入上行。", "财务曲线更偏稳健增长，主业精进是第一引擎。"]
+        : ["财务节奏以稳中求进为主，先管住现金流再追求收益率。", "今年财务不宜贪快，先稳预算与储备再做进攻。"]
+  );
+  const wealthHint = lifeAnalysis.wealthPower >= 2
+    ? seededChoice(profile, "wealth-power-strong", [
+      "你的本命财星基础不弱，适合通过谈判、成交、资源整合放大收入。",
+      "财星底盘较好，可通过业务扩容与资源协同拉高收益上限。"
+    ])
+    : seededChoice(profile, "wealth-power-weak", [
+      "你的本命财星更依赖稳定兑现，重心应放在现金流和负债管理。",
+      "财星偏谨慎，先建立安全垫再追求收益率会更稳。"
+    ]);
+  const nameHint = profile.nameSupportsWeak
+    ? seededChoice(profile, "wealth-name-support", [
+      `姓名中含有${lifeAnalysis.weak}元素，对财务决策中的耐心和稳定性有加分。`,
+      `姓名对偏弱位有补益，执行预算纪律时更容易坚持。`
+    ])
+    : seededChoice(profile, "wealth-name-nosupport", [
+      "姓名对偏弱位补益有限，投资决策更要依赖制度化纪律。",
+      `姓名未明显补${lifeAnalysis.weak}，建议用“规则先行”控制冲动交易。`
+    ]);
+  const riskHint = seededChoice(profile, "wealth-risk", [
+    "不建议重仓单一资产。",
+    "避免把全部筹码押在单一项目。",
+    "保持分散配置，优先守住本金安全。"
+  ]);
+  return `${text} ${wealthHint}${nameHint} ${riskHint}`;
 }
 
-function buildActionSuggestions(dayMaster, weakest) {
+function buildActionSuggestions(dayMaster, lifeAnalysis, profile) {
   const luckyDirection = { 木: "东、东南", 火: "南", 土: "中宫、东北", 金: "西、西北", 水: "北" }[dayMaster];
-  const balancingColor = { 木: "青绿系", 火: "暖红系", 土: "米黄棕系", 金: "白灰金属系", 水: "蓝黑系" }[weakest];
-  return [
-    "作息转运：连续 90 天保持固定入睡时间（建议 23:30 前），优先修复精力场。",
+  const balancingColor = { 木: "青绿系", 火: "暖红系", 土: "米黄棕系", 金: "白灰金属系", 水: "蓝黑系" }[lifeAnalysis.weak];
+  const nameAction = profile.nameSupportsWeak
+    ? `名字已带${lifeAnalysis.weak}补益，可在社媒昵称/签名中保持该字形，强化一致性。`
+    : `名字对${lifeAnalysis.weak}补益不足，可在昵称、品牌名或常用ID里补一个${lifeAnalysis.weak}属性字。`;
+  const scheduleAction = seededChoice(profile, "action-schedule", [
+    "作息转运：连续 90 天保持固定入睡时间（建议 23:30 前）。",
+    "作息转运：连续 12 周执行固定睡眠窗，优先修复精力稳定性。",
+    "作息转运：先把起床时间锁定，再逐步提前睡眠。"
+  ]);
+  const workAction = seededChoice(profile, "action-work", [
+    `行为转运：每周做一次“复盘清单”，聚焦 3 件可量化推进事项，优先补${lifeAnalysis.weak}相关能力。`,
+    `行为转运：按“1个主目标+2个关键动作”周推进，重点补${lifeAnalysis.weak}短板。`,
+    `行为转运：建立周计划看板，优先完成与${lifeAnalysis.weak}补益相关的任务。`
+  ]);
+  const envAction = seededChoice(profile, "action-env", [
     `环境转运：办公位或书桌朝向可优先考虑${luckyDirection}方位。`,
-    "行为转运：每周做一次“复盘清单”，聚焦 3 件可量化推进事项。",
-    `五行补益：日常穿搭、配饰或空间可增加${balancingColor}元素。`
+    `环境转运：核心工作区尽量布置在${luckyDirection}方位，提升执行专注度。`
+  ]);
+  const colorAction = seededChoice(profile, "action-color", [
+    `五行补益：日常穿搭、配饰或空间可增加${balancingColor}元素。`,
+    `五行补益：本年度可增加${balancingColor}主题元素，强化补弱信号。`
+  ]);
+  return [
+    `${scheduleAction}${profile.clashCount > 0 ? "今年优先抗波动。" : "今年优先稳态放大。"} `,
+    envAction,
+    workAction,
+    nameAction,
+    colorAction
   ];
 }
 
-function buildCautions(strongest, weakest) {
-  return [
-    `${strongest}旺导致的典型风险是“过度推进”，重要决策请设置冷静期（至少 24 小时）。`,
-    `${weakest}弱会体现在执行后劲不足，避免并行过多任务，建议一次聚焦一个主目标。`,
-    "涉及职业跳槽、合伙、婚恋承诺等关键事项，建议先做现实条件审查，再看运势择时。"
+function buildFortuneProfile(bazi, yearPillar, lifeAnalysis, nameAnalysis, relation) {
+  const natalBranches = [
+    bazi.pillars.year.branchIndex,
+    bazi.pillars.month.branchIndex,
+    bazi.pillars.day.branchIndex,
+    bazi.pillars.hour.branchIndex
   ];
+  const annualBranch = yearPillar.branchIndex;
+  const clashCount = natalBranches.filter((b) => isBranchClash(b, annualBranch)).length;
+  const dayBranchClashed = isBranchClash(bazi.pillars.day.branchIndex, annualBranch);
+  const branchEchoCount = natalBranches.filter((b) => b === annualBranch).length;
+  const nameSupportsWeak = (nameAnalysis.counts[lifeAnalysis.weak] || 0) > 0;
+
+  const evidencePoints = [
+    `流年干支为${yearPillar.text}，与你日主${lifeAnalysis.dayMaster}形成“${relation}”关系。`,
+    `命盘结构为${lifeAnalysis.structureType}，${lifeAnalysis.dominant}偏旺、${lifeAnalysis.weak}偏弱。`,
+    clashCount > 0
+      ? `流年支${yearPillar.branch}与原局出现${clashCount}处冲动位，年度变动性增强。`
+      : `流年支${yearPillar.branch}与原局冲动位较少，年度稳定性更好。`,
+    nameSupportsWeak
+      ? `姓名含${lifeAnalysis.weak}元素，对偏弱位有补益。`
+      : `姓名对偏弱位${lifeAnalysis.weak}补益有限。`
+  ];
+
+  return {
+    clashCount,
+    dayBranchClashed,
+    branchEchoCount,
+    nameSupportsWeak,
+    fingerprint: `${yearPillar.text}|${bazi.pillars.year.text}${bazi.pillars.month.text}${bazi.pillars.day.text}${bazi.pillars.hour.text}|${nameAnalysis.chars.join("")}|${lifeAnalysis.structureType}|${lifeAnalysis.dominant}${lifeAnalysis.weak}`,
+    evidencePoints
+  };
+}
+
+function seededChoice(profile, tag, choices) {
+  if (!choices || choices.length === 0) return "";
+  const seed = stableHash(`${profile.fingerprint}|${tag}`);
+  return choices[seed % choices.length];
+}
+
+function stableHash(text) {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) % 2147483647;
+  }
+  return hash;
+}
+
+function isBranchClash(a, b) {
+  return (a + 6) % 12 === b;
+}
+
+function classifyStructure(supportPower, pressurePower, outputPower) {
+  if (supportPower >= pressurePower + 2 && outputPower >= 2) return "身旺带输出";
+  if (pressurePower >= supportPower + 2) return "受压求稳";
+  if (supportPower <= 1) return "身弱需扶";
+  return "中和可调";
+}
+
+function getGeneratingSource(target) {
+  const generates = { 木: "火", 火: "土", 土: "金", 金: "水", 水: "木" };
+  return Object.keys(generates).find((k) => generates[k] === target);
+}
+
+function getGeneratedTarget(source) {
+  const generates = { 木: "火", 火: "土", 土: "金", 金: "水", 水: "木" };
+  return generates[source];
+}
+
+function getControlledTarget(source) {
+  const controls = { 木: "土", 土: "水", 水: "火", 火: "金", 金: "木" };
+  return controls[source];
+}
+
+function getControllerSource(target) {
+  const controls = { 木: "土", 土: "水", 水: "火", 火: "金", 金: "木" };
+  return Object.keys(controls).find((k) => controls[k] === target);
 }
 
 function runEngineValidation() {
@@ -687,13 +919,18 @@ function runEngineValidation() {
     passed: verifySexagenaryUniqueness(1984, 2, 2)
   });
 
+  checks.push({
+    name: "个性化文案差异校验",
+    passed: verifyPersonalizationDiversity()
+  });
+
   const failed = checks.filter((c) => !c.passed).map((c) => c.name);
   return {
     passed: failed.length === 0,
     checks,
     failed,
     text: failed.length === 0
-      ? "已通过 5 项引擎校验（立春换年、节气定月、日柱连续性、时柱边界、六十甲子唯一性）。"
+      ? "已通过 6 项引擎校验（立春换年、节气定月、日柱连续性、时柱边界、六十甲子唯一性、个性化文案差异）。"
       : `校验未全部通过：${failed.join("、")}`
   };
 }
@@ -706,6 +943,26 @@ function verifySexagenaryUniqueness(baseYear, baseMonth, baseDay) {
     seen.add(p.text);
   }
   return seen.size === 60;
+}
+
+function verifyPersonalizationDiversity() {
+  const samples = [
+    { name: "张梓涵", y: 1993, m: 8, d: 16, h: 9, min: 18, lon: 121.4737, offset: 8, gender: "female" },
+    { name: "王鑫宇", y: 1988, m: 2, d: 5, h: 21, min: 40, lon: 113.2644, offset: 8, gender: "male" },
+    { name: "李沐晨", y: 2001, m: 11, d: 29, h: 6, min: 12, lon: -74.006, offset: -5, gender: "male" }
+  ];
+
+  const signatures = samples.map((s) => {
+    const ts = toTrueSolarTime(s.y, s.m, s.d, s.h, s.min, s.lon, s.offset);
+    const bazi = calcBazi(ts);
+    const name = analyzeNameWuxing(s.name);
+    const life = analyzeLifeElements(bazi, name);
+    const annual = calcAnnualFortune(bazi, 2026, s.gender, life, name);
+    return [annual.career, annual.love, annual.health, annual.wealth, ...annual.actions].join("|");
+  });
+
+  const unique = new Set(signatures);
+  return unique.size === signatures.length;
 }
 
 function updateValidationBadge(validation) {
@@ -764,6 +1021,11 @@ function renderReport(ctx) {
     </div>
 
     <div class="report-section">
+      <h3>个性化推断依据</h3>
+      <ol>${annual.evidencePoints.map((item) => `<li>${item}</li>`).join("")}</ol>
+    </div>
+
+    <div class="report-section">
       <h3>事业运</h3>
       <p>${annual.career}</p>
     </div>
@@ -783,11 +1045,6 @@ function renderReport(ctx) {
     <div class="report-section">
       <h3>转运操作建议</h3>
       <ol>${annual.actions.map((a) => `<li>${a}</li>`).join("")}</ol>
-    </div>
-
-    <div class="report-section">
-      <h3>注意事项</h3>
-      <ol>${annual.cautions.map((c) => `<li>${c}</li>`).join("")}</ol>
     </div>
 
     <div class="report-section">
@@ -838,6 +1095,10 @@ function buildPlainTextReport(ctx) {
   lines.push(annual.personalBridge);
   lines.push("");
 
+  lines.push("个性化推断依据：");
+  annual.evidencePoints.forEach((item, idx) => lines.push(`${idx + 1}. ${item}`));
+  lines.push("");
+
   lines.push("事业运：");
   lines.push(annual.career);
   lines.push("");
@@ -856,10 +1117,6 @@ function buildPlainTextReport(ctx) {
 
   lines.push("转运操作建议：");
   annual.actions.forEach((item, idx) => lines.push(`${idx + 1}. ${item}`));
-  lines.push("");
-
-  lines.push("注意事项：");
-  annual.cautions.forEach((item, idx) => lines.push(`${idx + 1}. ${item}`));
   lines.push("");
 
   lines.push("后台算法校验：");
