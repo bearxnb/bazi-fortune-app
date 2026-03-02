@@ -97,6 +97,15 @@ const NAME_CHAR_ELEMENT_MAP = {
   "土": "土", "坤": "土", "垚": "土", "城": "土", "培": "土", "宇": "土", "安": "土", "峰": "土"
 };
 
+const ZIWEI_PALACES = ["命宫", "兄弟", "夫妻", "子女", "财帛", "疾厄", "迁移", "仆役", "官禄", "田宅", "福德", "父母"];
+const ZIWEI_STYLE_POOL = ["开创型", "稳健型", "机巧型", "统筹型", "感知型", "务实型"];
+const ICHING_GUA = [
+  "乾", "坤", "屯", "蒙", "需", "讼", "师", "比", "小畜", "履", "泰", "否", "同人", "大有", "谦", "豫",
+  "随", "蛊", "临", "观", "噬嗑", "贲", "剥", "复", "无妄", "大畜", "颐", "大过", "坎", "离", "咸", "恒",
+  "遁", "大壮", "晋", "明夷", "家人", "睽", "蹇", "解", "损", "益", "夬", "姤", "萃", "升", "困", "井",
+  "革", "鼎", "震", "艮", "渐", "归妹", "丰", "旅", "巽", "兑", "涣", "节", "中孚", "小过", "既济", "未济"
+];
+
 // 台湾常见子平法：立春换年，节气定月。这里使用定气近似到“日”的工程算法。
 const JIE_QI_C = {
   "小寒": { c20: 6.11, c21: 5.4055 },
@@ -158,11 +167,14 @@ const timezoneEl = document.getElementById("timezone");
 const lonEl = document.getElementById("longitude");
 const latEl = document.getElementById("latitude");
 const copyBtn = document.getElementById("copy-report");
+const downloadChartBtn = document.getElementById("download-chart");
 const aiSection = document.getElementById("ai-section");
 const aiContent = document.getElementById("ai-content");
 const validationBadge = document.getElementById("validation-badge");
+const fateCanvas = document.getElementById("fate-canvas");
 
 let latestReportText = "";
+let latestChartDataUrl = "";
 const engineValidation = runEngineValidation();
 
 initLocationSelectors();
@@ -192,7 +204,17 @@ form.addEventListener("submit", async (e) => {
   const bazi = calcBazi(trueSolarDate);
   const nameAnalysis = analyzeNameWuxing(fullName);
   const lifeAnalysis = analyzeLifeElements(bazi, nameAnalysis);
-  const annual = calcAnnualFortune(bazi, new Date().getFullYear(), gender, lifeAnalysis, nameAnalysis);
+  const ziweiAnalysis = calcZiweiProfile(trueSolarDate, bazi);
+  const ichingAnalysis = calcIchingProfile(fullName, bazi, trueSolarDate);
+  const annual = calcAnnualFortune(
+    bazi,
+    new Date().getFullYear(),
+    gender,
+    lifeAnalysis,
+    nameAnalysis,
+    ziweiAnalysis,
+    ichingAnalysis
+  );
 
   const ctx = {
     fullName,
@@ -203,6 +225,8 @@ form.addEventListener("submit", async (e) => {
     bazi,
     nameAnalysis,
     lifeAnalysis,
+    ziweiAnalysis,
+    ichingAnalysis,
     annual,
     validation: engineValidation
   };
@@ -223,6 +247,19 @@ form.addEventListener("submit", async (e) => {
     aiSection.classList.add("hidden");
     aiContent.textContent = "";
   }
+});
+
+downloadChartBtn.addEventListener("click", () => {
+  if (!latestChartDataUrl) {
+    alert("请先生成报告。");
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = latestChartDataUrl;
+  a.download = "mingpan.png";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 });
 
 copyBtn.addEventListener("click", async () => {
@@ -508,6 +545,42 @@ function detectNameCharElement(ch) {
   return ELEMENTS[code % 5];
 }
 
+function calcZiweiProfile(trueSolarDate, bazi) {
+  const month = trueSolarDate.getMonth() + 1;
+  const hourBranch = bazi.pillars.hour.branchIndex;
+  const mingIndex = (month + hourBranch + bazi.pillars.day.stemIndex) % 12;
+  const careerIndex = (mingIndex + 8) % 12;
+  const wealthIndex = (mingIndex + 4) % 12;
+  const relationIndex = (mingIndex + 2) % 12;
+  const style = ZIWEI_STYLE_POOL[(mingIndex + bazi.pillars.month.stemIndex) % ZIWEI_STYLE_POOL.length];
+  return {
+    mingIndex,
+    careerIndex,
+    wealthIndex,
+    relationIndex,
+    mingPalace: ZIWEI_PALACES[mingIndex],
+    careerPalace: ZIWEI_PALACES[careerIndex],
+    wealthPalace: ZIWEI_PALACES[wealthIndex],
+    relationPalace: ZIWEI_PALACES[relationIndex],
+    style
+  };
+}
+
+function calcIchingProfile(fullName, bazi, trueSolarDate) {
+  const seed = stableHash(`${fullName}|${bazi.pillars.year.text}|${bazi.pillars.month.text}|${bazi.pillars.day.text}|${bazi.pillars.hour.text}|${formatDateTime(trueSolarDate)}`);
+  const baseIndex = seed % 64;
+  const changedIndex = (seed + bazi.pillars.day.branchIndex * 7 + bazi.pillars.hour.stemIndex) % 64;
+  const movingLine = (seed % 6) + 1;
+  return {
+    baseIndex,
+    changedIndex,
+    baseGua: ICHING_GUA[baseIndex],
+    changedGua: ICHING_GUA[changedIndex],
+    movingLine,
+    clue: `本卦${ICHING_GUA[baseIndex]}，变卦${ICHING_GUA[changedIndex]}，动爻在第${movingLine}爻`
+  };
+}
+
 function analyzeLifeElements(bazi, nameAnalysis) {
   const dayMaster = bazi.pillars.day.stemElement;
   const counts = bazi.elementCount;
@@ -579,18 +652,19 @@ function buildNameLinkText(nameAnalysis, weak, dominant) {
   return `姓名五行与命局联动：${weakDesc}，${dominantDesc}。在对外昵称或品牌名上，可优先保留补弱字。`;
 }
 
-function calcAnnualFortune(bazi, targetYear, gender, lifeAnalysis, nameAnalysis) {
+function calcAnnualFortune(bazi, targetYear, gender, lifeAnalysis, nameAnalysis, ziweiAnalysis, ichingAnalysis) {
   const yearPillar = getYearPillar(targetYear, 6, 1);
   const dayMaster = bazi.pillars.day.stemElement;
   const relation = getElementRelation(dayMaster, yearPillar.stemElement);
   const strengthHint = bazi.elementCount[dayMaster] >= 2 ? "偏强" : "偏弱";
-  const profile = buildFortuneProfile(bazi, yearPillar, lifeAnalysis, nameAnalysis, relation);
+  const profile = buildFortuneProfile(bazi, yearPillar, lifeAnalysis, nameAnalysis, relation, ziweiAnalysis, ichingAnalysis);
 
-  const career = buildCareerText(relation, strengthHint, lifeAnalysis, profile);
-  const love = buildLoveText(relation, gender, lifeAnalysis, profile);
-  const health = buildHealthText(lifeAnalysis, profile);
-  const wealth = buildWealthText(relation, lifeAnalysis, profile);
+  const career = buildCareerText(relation, strengthHint, lifeAnalysis, profile, ziweiAnalysis, ichingAnalysis);
+  const love = buildLoveText(relation, gender, lifeAnalysis, profile, ziweiAnalysis, ichingAnalysis);
+  const health = buildHealthText(lifeAnalysis, profile, ziweiAnalysis);
+  const wealth = buildWealthText(relation, lifeAnalysis, profile, ziweiAnalysis, ichingAnalysis);
   const actions = buildActionSuggestions(dayMaster, lifeAnalysis, profile);
+  const psychologyHint = buildPsychologyHint(lifeAnalysis, profile);
   const yearOverview = build2026Overview(targetYear);
   const personalBridge = buildPersonalYearBridge(relation, yearPillar, lifeAnalysis, profile);
 
@@ -607,7 +681,8 @@ function calcAnnualFortune(bazi, targetYear, gender, lifeAnalysis, nameAnalysis)
     love,
     health,
     wealth,
-    actions
+    actions,
+    psychologyHint
   };
 }
 
@@ -623,7 +698,7 @@ function buildPersonalYearBridge(relation, yearPillar, lifeAnalysis, profile) {
   const branchHint = profile.clashCount > 0
     ? `流年地支${yearPillar.branch}与你命盘出现${profile.clashCount}处冲动位，说明“变动”会先于“稳定”。`
     : `流年地支${yearPillar.branch}与命盘冲动位较少，适合走“稳扎稳打”的长期路线。`;
-  return `你的个人流年与大势连接点是“${relation}”（日主对流年天干${yearPillar.stem}）。${branchHint} 你在${lifeAnalysis.dominant}相关能力上更容易放大成果，但要用${lifeAnalysis.weak}做稳定器，避免高开低走。`;
+  return `你的个人流年与大势连接点是“${relation}”（日主对流年天干${yearPillar.stem}）。${branchHint} 紫微侧看命宫落${profile.ziwei.mingPalace}、风格偏${profile.ziwei.style}；易经线索为${profile.iching.clue}。你在${lifeAnalysis.dominant}相关能力上更容易放大成果，但要用${lifeAnalysis.weak}做稳定器，避免高开低走。`;
 }
 
 function getElementRelation(selfElement, otherElement) {
@@ -686,7 +761,8 @@ function buildCareerText(relation, strengthHint, lifeAnalysis, profile) {
     "建议按“季度主题+周执行指标”落地。",
     "建议以“一个核心战场 + 两个辅助抓手”配置精力。"
   ]);
-  return `${base} ${modeHint}${changeHint} 命局日主${strengthHint}，当前${lifeAnalysis.dominant}偏旺、${lifeAnalysis.weak}偏弱，${focusHint}`;
+  const ziweiHint = `紫微官禄位落${profile.ziwei.careerPalace}，显示你今年更适合${profile.ziwei.style === "开创型" || profile.ziwei.style === "统筹型" ? "承担主导型角色" : "以专业深耕取胜"}。`;
+  return `${base} ${modeHint}${changeHint} ${ziweiHint} 命局日主${strengthHint}，当前${lifeAnalysis.dominant}偏旺、${lifeAnalysis.weak}偏弱，${focusHint}`;
 }
 
 function buildLoveText(relation, gender, lifeAnalysis, profile) {
@@ -716,7 +792,8 @@ function buildLoveText(relation, gender, lifeAnalysis, profile) {
     `你在关系里推进速度偏快，建议给彼此保留“对齐节奏”的缓冲区。`,
     `今年关系经营关键在“先确认再推进”，避免用想象代替共识。`
   ]);
-  return `${relationHint}${genderHint} ${branchHint} ${styleHint}`;
+  const ziweiHint = `紫微夫妻位在${profile.ziwei.relationPalace}，关系经营宜${profile.ziwei.style === "感知型" ? "先共情后结论" : "先对齐边界再推进承诺"}。`;
+  return `${relationHint}${genderHint} ${branchHint} ${styleHint} ${ziweiHint}`;
 }
 
 function buildHealthText(lifeAnalysis, profile) {
@@ -738,7 +815,8 @@ function buildHealthText(lifeAnalysis, profile) {
     "建议每 3 个月复盘一次体能和睡眠数据。",
     "建议建立“睡眠-饮食-运动”三项周追踪。"
   ]);
-  return `今年重点关注${map[lifeAnalysis.weak]}，这是你的相对薄弱位；${map[lifeAnalysis.dominant]}属于易过载位。${seasonHint}${stressHint} ${actHint}`;
+  const yiHint = `易经${profile.iching.baseGua}转${profile.iching.changedGua}，提示“节律比强度更重要”。`;
+  return `今年重点关注${map[lifeAnalysis.weak]}，这是你的相对薄弱位；${map[lifeAnalysis.dominant]}属于易过载位。${seasonHint}${stressHint} ${actHint} ${yiHint}`;
 }
 
 function buildWealthText(relation, lifeAnalysis, profile) {
@@ -774,7 +852,8 @@ function buildWealthText(relation, lifeAnalysis, profile) {
     "避免把全部筹码押在单一项目。",
     "保持分散配置，优先守住本金安全。"
   ]);
-  return `${text} ${wealthHint}${nameHint} ${riskHint}`;
+  const ziweiHint = `紫微财帛位落${profile.ziwei.wealthPalace}，资金策略宜${profile.ziwei.style === "稳健型" || profile.ziwei.style === "务实型" ? "稳健滚动" : "主业现金流+小比例进攻"}。`;
+  return `${text} ${wealthHint}${nameHint} ${ziweiHint} ${riskHint}`;
 }
 
 function buildActionSuggestions(dayMaster, lifeAnalysis, profile) {
@@ -810,7 +889,15 @@ function buildActionSuggestions(dayMaster, lifeAnalysis, profile) {
   ];
 }
 
-function buildFortuneProfile(bazi, yearPillar, lifeAnalysis, nameAnalysis, relation) {
+function buildPsychologyHint(lifeAnalysis, profile) {
+  const bias = profile.clashCount > 0 ? "情绪驱动决策偏差" : "过度保守偏差";
+  const tip = profile.clashCount > 0
+    ? "重大决定前先写下“最坏情境+应对预案”，再执行。"
+    : "为每个目标设置明确截止时间，防止无限延期。";
+  return `心理校正：你今年最常见的风险是${bias}。建议采用“先记录事实，再判断感受”的两步法；${tip}`;
+}
+
+function buildFortuneProfile(bazi, yearPillar, lifeAnalysis, nameAnalysis, relation, ziweiAnalysis, ichingAnalysis) {
   const natalBranches = [
     bazi.pillars.year.branchIndex,
     bazi.pillars.month.branchIndex,
@@ -839,7 +926,9 @@ function buildFortuneProfile(bazi, yearPillar, lifeAnalysis, nameAnalysis, relat
     dayBranchClashed,
     branchEchoCount,
     nameSupportsWeak,
-    fingerprint: `${yearPillar.text}|${bazi.pillars.year.text}${bazi.pillars.month.text}${bazi.pillars.day.text}${bazi.pillars.hour.text}|${nameAnalysis.chars.join("")}|${lifeAnalysis.structureType}|${lifeAnalysis.dominant}${lifeAnalysis.weak}`,
+    fingerprint: `${yearPillar.text}|${bazi.pillars.year.text}${bazi.pillars.month.text}${bazi.pillars.day.text}${bazi.pillars.hour.text}|${nameAnalysis.chars.join("")}|${lifeAnalysis.structureType}|${lifeAnalysis.dominant}${lifeAnalysis.weak}|${relation}`,
+    ziwei: ziweiAnalysis,
+    iching: ichingAnalysis,
     evidencePoints
   };
 }
@@ -952,17 +1041,26 @@ function verifyPersonalizationDiversity() {
     { name: "李沐晨", y: 2001, m: 11, d: 29, h: 6, min: 12, lon: -74.006, offset: -5, gender: "male" }
   ];
 
-  const signatures = samples.map((s) => {
+  const outputs = samples.map((s) => {
     const ts = toTrueSolarTime(s.y, s.m, s.d, s.h, s.min, s.lon, s.offset);
     const bazi = calcBazi(ts);
     const name = analyzeNameWuxing(s.name);
     const life = analyzeLifeElements(bazi, name);
-    const annual = calcAnnualFortune(bazi, 2026, s.gender, life, name);
-    return [annual.career, annual.love, annual.health, annual.wealth, ...annual.actions].join("|");
+    const ziwei = calcZiweiProfile(ts, bazi);
+    const iching = calcIchingProfile(s.name, bazi, ts);
+    const annual = calcAnnualFortune(bazi, 2026, s.gender, life, name, ziwei, iching);
+    return annual;
   });
 
-  const unique = new Set(signatures);
-  return unique.size === signatures.length;
+  const sections = [
+    outputs.map((x) => x.career),
+    outputs.map((x) => x.love),
+    outputs.map((x) => x.health),
+    outputs.map((x) => x.wealth),
+    outputs.map((x) => x.actions.join("||")),
+    outputs.map((x) => x.psychologyHint)
+  ];
+  return sections.every((group) => new Set(group).size >= 2);
 }
 
 function updateValidationBadge(validation) {
@@ -979,7 +1077,7 @@ function updateValidationBadge(validation) {
 function renderReport(ctx) {
   const resultCard = document.getElementById("result-card");
   const resultContent = document.getElementById("result-content");
-  const { fullName, birth, cityInfo, utcOffset, trueSolarDate, bazi, nameAnalysis, lifeAnalysis, annual, validation } = ctx;
+  const { fullName, birth, cityInfo, utcOffset, trueSolarDate, bazi, nameAnalysis, lifeAnalysis, ziweiAnalysis, ichingAnalysis, annual, validation } = ctx;
 
   const ratioBars = ELEMENTS.map((e) => `${e}:${bazi.elementRatio[e]}%`).join(" | ");
   const nameParts = nameAnalysis.details.map((d) => `${d.char}-${d.element}`).join("，") || "无";
@@ -1012,6 +1110,12 @@ function renderReport(ctx) {
       <p>姓名拆解：${nameParts}</p>
       <p>${nameAnalysis.summary}</p>
       <p>${lifeAnalysis.nameLinkText}</p>
+    </div>
+
+    <div class="report-section">
+      <h3>紫微与易经辅助线索</h3>
+      <p>紫微：命宫落${ziweiAnalysis.mingPalace}，官禄位${ziweiAnalysis.careerPalace}，财帛位${ziweiAnalysis.wealthPalace}，风格偏${ziweiAnalysis.style}。</p>
+      <p>易经：${ichingAnalysis.clue}。</p>
     </div>
 
     <div class="report-section">
@@ -1048,6 +1152,11 @@ function renderReport(ctx) {
     </div>
 
     <div class="report-section">
+      <h3>心理决策提示</h3>
+      <p>${annual.psychologyHint}</p>
+    </div>
+
+    <div class="report-section">
       <h3>后台算法校验</h3>
       <p>${validation.text}</p>
     </div>
@@ -1059,11 +1168,12 @@ function renderReport(ctx) {
   `;
 
   latestReportText = buildPlainTextReport(ctx);
+  latestChartDataUrl = drawFateCanvas(ctx);
   resultCard.classList.remove("hidden");
 }
 
 function buildPlainTextReport(ctx) {
-  const { fullName, birth, cityInfo, utcOffset, trueSolarDate, bazi, nameAnalysis, lifeAnalysis, annual, validation } = ctx;
+  const { fullName, birth, cityInfo, utcOffset, trueSolarDate, bazi, nameAnalysis, lifeAnalysis, ziweiAnalysis, ichingAnalysis, annual, validation } = ctx;
   const lines = [];
 
   lines.push(`【${annual.targetYear} 年个人运势报告】`);
@@ -1088,6 +1198,11 @@ function buildPlainTextReport(ctx) {
   lines.push(`姓名拆解：${nameAnalysis.details.map((d) => `${d.char}-${d.element}`).join("，") || "无"}`);
   lines.push(nameAnalysis.summary);
   lines.push(lifeAnalysis.nameLinkText);
+  lines.push("");
+
+  lines.push("紫微与易经辅助线索：");
+  lines.push(`紫微：命宫${ziweiAnalysis.mingPalace}，官禄位${ziweiAnalysis.careerPalace}，财帛位${ziweiAnalysis.wealthPalace}，风格${ziweiAnalysis.style}。`);
+  lines.push(`易经：${ichingAnalysis.clue}。`);
   lines.push("");
 
   lines.push(`${annual.targetYear} 年整体运势（大势）：`);
@@ -1119,6 +1234,10 @@ function buildPlainTextReport(ctx) {
   annual.actions.forEach((item, idx) => lines.push(`${idx + 1}. ${item}`));
   lines.push("");
 
+  lines.push("心理决策提示：");
+  lines.push(annual.psychologyHint);
+  lines.push("");
+
   lines.push("后台算法校验：");
   lines.push(validation.text);
   lines.push("");
@@ -1127,6 +1246,86 @@ function buildPlainTextReport(ctx) {
   lines.push("免责声明：本报告用于参考，不替代医疗、法律、金融等专业意见。");
 
   return lines.join("\n");
+}
+
+function drawFateCanvas(ctx) {
+  if (!fateCanvas) return "";
+  const { fullName, birth, bazi, ziweiAnalysis, ichingAnalysis, annual } = ctx;
+  const c = fateCanvas;
+  const g = c.getContext("2d");
+  if (!g) return "";
+
+  g.fillStyle = "#f9f0dc";
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = "#2f2012";
+  g.font = "bold 34px serif";
+  g.fillText("易经命盘图", 34, 54);
+  g.font = "20px serif";
+  g.fillText(`${fullName} · ${annual.targetYear} 年运势`, 36, 86);
+
+  g.strokeStyle = "#8b6438";
+  g.lineWidth = 2;
+  g.strokeRect(24, 22, c.width - 48, c.height - 44);
+  g.strokeRect(34, 32, c.width - 68, c.height - 64);
+
+  drawPillarBlock(g, 40, 120, "年柱", bazi.pillars.year.text);
+  drawPillarBlock(g, 290, 120, "月柱", bazi.pillars.month.text);
+  drawPillarBlock(g, 540, 120, "日柱", bazi.pillars.day.text);
+  drawPillarBlock(g, 790, 120, "时柱", bazi.pillars.hour.text);
+
+  g.font = "18px serif";
+  g.fillStyle = "#3d2a18";
+  g.fillText(`命宫：${ziweiAnalysis.mingPalace}  官禄：${ziweiAnalysis.careerPalace}  财帛：${ziweiAnalysis.wealthPalace}`, 42, 278);
+  g.fillText(`易经：${ichingAnalysis.baseGua} -> ${ichingAnalysis.changedGua}  动爻：第${ichingAnalysis.movingLine}爻`, 42, 310);
+  g.fillText(`流年：${annual.annualPillar.text}  关系：${annual.relation}`, 42, 342);
+
+  drawZiweiWheel(g, 60, 390, 420, 230, ziweiAnalysis);
+
+  g.fillStyle = "#4d351d";
+  g.font = "16px serif";
+  g.fillText("心理提示：以上解读用于自我观察与计划管理，请结合现实信息做决策。", 520, 642);
+
+  return c.toDataURL("image/png");
+}
+
+function drawPillarBlock(g, x, y, title, value) {
+  g.fillStyle = "#f3e3c1";
+  g.strokeStyle = "#a77b45";
+  g.lineWidth = 1.5;
+  g.fillRect(x, y, 210, 132);
+  g.strokeRect(x, y, 210, 132);
+  g.fillStyle = "#5a3d1f";
+  g.font = "18px serif";
+  g.fillText(title, x + 14, y + 28);
+  g.font = "bold 58px serif";
+  g.fillStyle = "#8a2b22";
+  g.fillText(value, x + 62, y + 93);
+}
+
+function drawZiweiWheel(g, x, y, w, h, ziwei) {
+  g.fillStyle = "#f2dfbb";
+  g.strokeStyle = "#a77b45";
+  g.lineWidth = 1.5;
+  g.fillRect(x, y, w, h);
+  g.strokeRect(x, y, w, h);
+
+  const cols = 4;
+  const rows = 3;
+  const cw = w / cols;
+  const rh = h / rows;
+  g.font = "14px serif";
+  g.fillStyle = "#4b321b";
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const idx = r * cols + c;
+      g.strokeRect(x + c * cw, y + r * rh, cw, rh);
+      const name = ZIWEI_PALACES[idx];
+      g.fillText(name, x + c * cw + 8, y + r * rh + 24);
+      if (idx === ziwei.mingIndex) g.fillText("命主", x + c * cw + 8, y + r * rh + 48);
+      if (idx === ziwei.careerIndex) g.fillText("官禄", x + c * cw + 8, y + r * rh + 66);
+      if (idx === ziwei.wealthIndex) g.fillText("财帛", x + c * cw + 8, y + r * rh + 84);
+    }
+  }
 }
 
 async function generateAiEnhancedText(ctx, apiKey) {
