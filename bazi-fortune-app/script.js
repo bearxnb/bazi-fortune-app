@@ -106,6 +106,102 @@ const ICHING_GUA = [
   "革", "鼎", "震", "艮", "渐", "归妹", "丰", "旅", "巽", "兑", "涣", "节", "中孚", "小过", "既济", "未济"
 ];
 
+const COUNTRY_LABELS = {
+  zh: { "中国": "中国", "美国": "美国", "日本": "日本", "新加坡": "新加坡", "英国": "英国" },
+  en: { "中国": "China", "美国": "United States", "日本": "Japan", "新加坡": "Singapore", "英国": "United Kingdom" }
+};
+
+const UI_TEXT = {
+  zh: {
+    pageTitle: "AI 易经八字年度运势",
+    heroEyebrow: "周易 · 八字 · 流年",
+    pageSubtitle: "输入出生信息，自动计算真太阳时与四柱八字，生成今年运势报告。",
+    introTitle: "易经八字的历史与原理",
+    introP1: "《易经》源于先秦的卜筮传统，后世结合天干地支、阴阳五行与节气历法，逐渐形成四柱八字这一套观察时间与人格节律的方法。",
+    introP2: "八字以出生年、月、日、时构成四柱，通过日主强弱、五行流转、岁运变化来解释个人的倾向、节奏与阶段性主题。本页面采用节气定月、立春换年与真太阳时校正的工程化排盘思路。",
+    labels: {
+      fullName: "姓名",
+      birthDate: "出生日期",
+      birthTime: "出生时间",
+      country: "出生国家",
+      city: "出生城市",
+      timezone: "时区（自动）",
+      longitude: "经度（自动）",
+      latitude: "纬度（自动）",
+      gender: "性别（可选）",
+      apiKey: "OpenAI API Key（可选，本地直连）"
+    },
+    placeholders: { fullName: "请输入姓名" },
+    gender: { empty: "不填写", male: "男", female: "女" },
+    buttons: {
+      submit: "生成我的今年运势",
+      copy: "复制纯文本报告",
+      download: "下载命盘图",
+      langToggle: "English"
+    },
+    sections: {
+      resultTitle: "年度运势报告",
+      aiTitle: "AI 增强解读"
+    },
+    alerts: {
+      missing: "请完整填写姓名和出生信息。",
+      noReport: "请先生成报告。",
+      copied: "已复制纯文本报告。",
+      copyFail: "复制失败，请手动选择文本复制。",
+      aiLoading: "正在生成 AI 增强解读..."
+    },
+    validation: {
+      idle: "算法验证未运行",
+      ok: "算法验证通过",
+      fail: "算法验证异常"
+    }
+  },
+  en: {
+    pageTitle: "AI I Ching BaZi Annual Fortune",
+    heroEyebrow: "I Ching · BaZi · Annual Flow",
+    pageSubtitle: "Enter birth details to calculate true solar time and Four Pillars, then generate this year's fortune report.",
+    introTitle: "History And Principles Of I Ching BaZi",
+    introP1: "The I Ching grew out of early Chinese divination traditions. Later scholars combined Heavenly Stems, Earthly Branches, yin-yang, five elements, and the solar calendar to form the Four Pillars system used to observe timing and personality tendencies.",
+    introP2: "BaZi uses the birth year, month, day, and hour as four pillars. By reading day master strength, five-element circulation, and annual timing shifts, it interprets personal tendencies, rhythm, and life themes. This page uses a practical engineering approach with solar-term month boundaries, Li Chun year switch, and true solar time correction.",
+    labels: {
+      fullName: "Full Name",
+      birthDate: "Birth Date",
+      birthTime: "Birth Time",
+      country: "Birth Country",
+      city: "Birth City",
+      timezone: "Timezone (Auto)",
+      longitude: "Longitude (Auto)",
+      latitude: "Latitude (Auto)",
+      gender: "Gender (Optional)",
+      apiKey: "OpenAI API Key (Optional, direct from browser)"
+    },
+    placeholders: { fullName: "Enter your name" },
+    gender: { empty: "Prefer not to say", male: "Male", female: "Female" },
+    buttons: {
+      submit: "Generate My Annual Fortune",
+      copy: "Copy Plain Text Report",
+      download: "Download Fate Chart",
+      langToggle: "中文"
+    },
+    sections: {
+      resultTitle: "Annual Fortune Report",
+      aiTitle: "AI Enhanced Reading"
+    },
+    alerts: {
+      missing: "Please complete your name and birth details.",
+      noReport: "Generate a report first.",
+      copied: "Plain text report copied.",
+      copyFail: "Copy failed. Please copy the text manually.",
+      aiLoading: "Generating AI enhanced reading..."
+    },
+    validation: {
+      idle: "Validation not run",
+      ok: "Validation passed",
+      fail: "Validation issue"
+    }
+  }
+};
+
 // 台湾常见子平法：立春换年，节气定月。这里使用定气近似到“日”的工程算法。
 const JIE_QI_C = {
   "小寒": { c20: 6.11, c21: 5.4055 },
@@ -166,6 +262,7 @@ const cityEl = document.getElementById("city");
 const timezoneEl = document.getElementById("timezone");
 const lonEl = document.getElementById("longitude");
 const latEl = document.getElementById("latitude");
+const langToggleBtn = document.getElementById("lang-toggle");
 const copyBtn = document.getElementById("copy-report");
 const downloadChartBtn = document.getElementById("download-chart");
 const aiSection = document.getElementById("ai-section");
@@ -175,9 +272,12 @@ const fateCanvas = document.getElementById("fate-canvas");
 
 let latestReportText = "";
 let latestChartDataUrl = "";
+let latestContext = null;
+let currentLocale = "zh";
 const engineValidation = runEngineValidation();
 
 initLocationSelectors();
+applyStaticTranslations();
 updateValidationBadge(engineValidation);
 
 form.addEventListener("submit", async (e) => {
@@ -191,7 +291,7 @@ form.addEventListener("submit", async (e) => {
   const openaiKey = document.getElementById("openai-key").value.trim();
 
   if (!fullName || !birthDate || !birthTime || !country || !city) {
-    alert("请完整填写姓名和出生信息。");
+    alert(t("alerts.missing"));
     return;
   }
 
@@ -231,17 +331,20 @@ form.addEventListener("submit", async (e) => {
     validation: engineValidation
   };
 
-  renderReport(ctx);
+  latestContext = ctx;
+  renderReport(localizeContext(ctx));
 
   if (openaiKey) {
     aiSection.classList.remove("hidden");
-    aiContent.textContent = "正在生成 AI 增强解读...";
+    aiContent.textContent = t("alerts.aiLoading");
     try {
       const aiText = await generateAiEnhancedText(ctx, openaiKey);
       aiContent.textContent = aiText;
       latestReportText += `\n\n【AI增强解读】\n${aiText}\n`;
     } catch (error) {
-      aiContent.textContent = `AI 增强解读失败：${error.message}`;
+      aiContent.textContent = isEnglish()
+        ? `AI enhanced reading failed: ${error.message}`
+        : `AI 增强解读失败：${error.message}`;
     }
   } else {
     aiSection.classList.add("hidden");
@@ -251,7 +354,7 @@ form.addEventListener("submit", async (e) => {
 
 downloadChartBtn.addEventListener("click", () => {
   if (!latestChartDataUrl) {
-    alert("请先生成报告。");
+    alert(t("alerts.noReport"));
     return;
   }
   const a = document.createElement("a");
@@ -264,12 +367,12 @@ downloadChartBtn.addEventListener("click", () => {
 
 copyBtn.addEventListener("click", async () => {
   if (!latestReportText) {
-    alert("请先生成报告。");
+    alert(t("alerts.noReport"));
     return;
   }
   try {
     await navigator.clipboard.writeText(latestReportText);
-    alert("已复制纯文本报告。");
+    alert(t("alerts.copied"));
   } catch (_error) {
     try {
       const textarea = document.createElement("textarea");
@@ -282,11 +385,18 @@ copyBtn.addEventListener("click", async () => {
       const ok = document.execCommand("copy");
       document.body.removeChild(textarea);
       if (!ok) throw new Error("execCommand copy failed");
-      alert("已复制纯文本报告。");
+      alert(t("alerts.copied"));
     } catch (_innerError) {
-      alert("复制失败，请手动选择文本复制。");
+      alert(t("alerts.copyFail"));
     }
   }
+});
+
+langToggleBtn.addEventListener("click", () => {
+  currentLocale = isEnglish() ? "zh" : "en";
+  applyStaticTranslations();
+  updateValidationBadge(engineValidation);
+  if (latestContext) renderReport(localizeContext(latestContext));
 });
 
 function buildSortedChinaTop50() {
@@ -303,12 +413,90 @@ function toInitials(pinyin) {
   return pinyin.split(" ").filter(Boolean).map((w) => w[0]).join("");
 }
 
+function isEnglish() {
+  return currentLocale === "en";
+}
+
+function t(path) {
+  const keys = path.split(".");
+  let value = UI_TEXT[currentLocale];
+  for (const key of keys) {
+    value = value?.[key];
+  }
+  return value ?? path;
+}
+
+function applyStaticTranslations() {
+  document.documentElement.lang = isEnglish() ? "en" : "zh-CN";
+  setText("hero-eyebrow", t("heroEyebrow"));
+  setText("page-title", t("pageTitle"));
+  setText("page-subtitle", t("pageSubtitle"));
+  setText("intro-title", t("introTitle"));
+  setText("intro-p1", t("introP1"));
+  setText("intro-p2", t("introP2"));
+  setText("label-full-name", t("labels.fullName"));
+  setText("label-birth-date", t("labels.birthDate"));
+  setText("label-birth-time", t("labels.birthTime"));
+  setText("label-country", t("labels.country"));
+  setText("label-city", t("labels.city"));
+  setText("label-timezone", t("labels.timezone"));
+  setText("label-longitude", t("labels.longitude"));
+  setText("label-latitude", t("labels.latitude"));
+  setText("label-gender", t("labels.gender"));
+  setText("label-api-key", t("labels.apiKey"));
+  setText("submit-button", t("buttons.submit"));
+  setText("copy-report", t("buttons.copy"));
+  setText("download-chart", t("buttons.download"));
+  setText("result-title", t("sections.resultTitle"));
+  setText("ai-title", t("sections.aiTitle"));
+  setText("lang-toggle", t("buttons.langToggle"));
+  setText("gender-empty", t("gender.empty"));
+  setText("gender-male", t("gender.male"));
+  setText("gender-female", t("gender.female"));
+  document.getElementById("full-name").placeholder = t("placeholders.fullName");
+  updateCountryOptions();
+  refreshCities();
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function localizeContext(ctx) {
+  const nameAnalysis = analyzeNameWuxing(ctx.fullName);
+  const lifeAnalysis = analyzeLifeElements(ctx.bazi, nameAnalysis);
+  const annual = calcAnnualFortune(
+    ctx.bazi,
+    ctx.annual.targetYear,
+    document.getElementById("gender").value,
+    lifeAnalysis,
+    nameAnalysis,
+    ctx.ziweiAnalysis,
+    ctx.ichingAnalysis
+  );
+  return {
+    ...ctx,
+    nameAnalysis,
+    lifeAnalysis,
+    annual
+  };
+}
+
 function initLocationSelectors() {
-  const countries = Object.keys(CITY_DB);
-  countryEl.innerHTML = countries.map((c) => `<option value="${c}">${c}</option>`).join("");
+  updateCountryOptions();
   countryEl.addEventListener("change", refreshCities);
   cityEl.addEventListener("change", updateGeoFields);
   refreshCities();
+}
+
+function updateCountryOptions() {
+  const selected = countryEl.value;
+  const countries = Object.keys(CITY_DB);
+  countryEl.innerHTML = countries.map((c) => `<option value="${c}">${COUNTRY_LABELS[currentLocale][c] || c}</option>`).join("");
+  if (selected && countries.includes(selected)) {
+    countryEl.value = selected;
+  }
 }
 
 function refreshCities() {
@@ -535,7 +723,9 @@ function analyzeNameWuxing(fullName) {
     ratio,
     dominant,
     weak,
-    summary: `姓名五行偏${dominant}，相对偏弱为${weak}。`
+    summary: isEnglish()
+      ? `The name leans toward ${dominant} and is relatively lighter in ${weak}.`
+      : `姓名五行偏${dominant}，相对偏弱为${weak}。`
   };
 }
 
@@ -625,6 +815,9 @@ function analyzeLifeElements(bazi, nameAnalysis) {
 }
 
 function buildLifeElementText(dayMaster, dominant, weak, ratio, structureType, supportElement) {
+  if (isEnglish()) {
+    return `Your Day Master is ${dayMaster}. The five-element balance is Wood ${ratio["木"]}%, Fire ${ratio["火"]}%, Earth ${ratio["土"]}%, Metal ${ratio["金"]}%, Water ${ratio["水"]}%. Overall, ${dominant} is stronger and ${weak} is lighter. Structurally this looks like "${structureType}", which means you rely on ${supportElement} support before pushing into expansion.`;
+  }
   return `你的日主为${dayMaster}，命盘五行比例为 木${ratio["木"]}% 火${ratio["火"]}% 土${ratio["土"]}% 金${ratio["金"]}% 水${ratio["水"]}%。整体呈现${dominant}偏旺、${weak}偏弱。结构上属于“${structureType}”类型，代表你更依赖${supportElement}来补气，决策上宜先保稳定再做扩张。`;
 }
 
@@ -638,17 +831,33 @@ function buildPersonalityText(dayMaster, dominant, weak, outputPower, pressurePo
   };
   const outputHint = outputPower >= 2 ? "表达和输出欲较强，适合把想法转成作品/成果。" : "输出节奏偏谨慎，先打磨再公开会更稳。";
   const pressureHint = pressurePower >= 2 ? "外部期待感较重，容易自我加压。" : "外部压力可控，更适合按自己的节奏推进。";
+  if (isEnglish()) {
+    const outputHintEn = outputPower >= 2
+      ? "Your output drive is strong, so ideas become stronger when turned into visible work."
+      : "Your output rhythm is more careful, so polishing before exposure works better.";
+    const pressureHintEn = pressurePower >= 2
+      ? "External expectations can feel heavy, and self-pressure rises easily."
+      : "External pressure is manageable, so self-paced progress works well.";
+    return `Core temperament: ${dayMasterTraits[dayMaster]}. ${outputHintEn} ${pressureHintEn} ${dominant} amplifies strengths, but the ${weak} side still determines long-term stability.`;
+  }
   return `性格底色：${dayMasterTraits[dayMaster]}。${outputHint}${pressureHint} 当前${dominant}旺会放大优势，但${weak}弱环节仍是你长期稳定性的关键。`;
 }
 
 function buildNameLinkText(nameAnalysis, weak, dominant) {
   if (!nameAnalysis.chars.length) {
-    return "姓名未识别到可分析字符，姓名五行联动分析已跳过。";
+    return isEnglish()
+      ? "No analyzable name characters were found, so the name-element linkage was skipped."
+      : "姓名未识别到可分析字符，姓名五行联动分析已跳过。";
   }
   const weakBoost = nameAnalysis.counts[weak];
   const dominantBoost = nameAnalysis.counts[dominant];
   const weakDesc = weakBoost >= 2 ? `对你偏弱的${weak}补益较强` : weakBoost === 1 ? `对偏弱的${weak}有一定补益` : `对偏弱的${weak}补益有限`;
   const dominantDesc = dominantBoost >= 2 ? `同时明显放大${dominant}强势项` : dominantBoost === 1 ? `并轻微增强${dominant}强势项` : `且不会额外放大${dominant}强势项`;
+  if (isEnglish()) {
+    const weakDescEn = weakBoost >= 2 ? `The name strongly supports your weaker ${weak} side` : weakBoost === 1 ? `The name gives some support to the weaker ${weak} side` : `The name offers limited support to the weaker ${weak} side`;
+    const dominantDescEn = dominantBoost >= 2 ? `while also clearly amplifying the already-strong ${dominant} side` : dominantBoost === 1 ? `while slightly reinforcing the stronger ${dominant} side` : `without further amplifying the stronger ${dominant} side`;
+    return `Name-to-chart linkage: ${weakDescEn}, ${dominantDescEn}. For public nicknames or brand labels, it is better to keep characters that nourish the weaker side.`;
+  }
   return `姓名五行与命局联动：${weakDesc}，${dominantDesc}。在对外昵称或品牌名上，可优先保留补弱字。`;
 }
 
@@ -688,9 +897,15 @@ function calcAnnualFortune(bazi, targetYear, gender, lifeAnalysis, nameAnalysis,
 
 function build2026Overview(targetYear) {
   if (targetYear === 2026) {
+    if (isEnglish()) {
+      return "2026 is the Bing-Wu year, with strong Fire symbolism. On a collective level this usually points to faster pace, higher visibility, and more direct competition. The broader annual tone is acceleration, manifestation, and polarization: proactive people gain stage time faster, while passive people feel more pressure.";
+    }
     return "2026 年为丙午年，火势明显增强，社会层面通常表现为节奏更快、曝光更强、竞争更直接。整体大运关键词是“提速、显化、两极分化”：主动者更容易拿到舞台，被动者会感到压力上升。";
   }
   const yPillar = getYearPillar(targetYear, 6, 1);
+  if (isEnglish()) {
+    return `${targetYear} is the ${yPillar.text} year. The overall tone follows the ${yPillar.stemElement} element, with the main task of turning strengths into concrete outcomes.`;
+  }
   return `${targetYear} 年为${yPillar.text}年，整体趋势会围绕${yPillar.stemElement}元素展开，主旋律是把优势变成可兑现结果。`;
 }
 
@@ -698,6 +913,12 @@ function buildPersonalYearBridge(relation, yearPillar, lifeAnalysis, profile) {
   const branchHint = profile.clashCount > 0
     ? `流年地支${yearPillar.branch}与你命盘出现${profile.clashCount}处冲动位，说明“变动”会先于“稳定”。`
     : `流年地支${yearPillar.branch}与命盘冲动位较少，适合走“稳扎稳打”的长期路线。`;
+  if (isEnglish()) {
+    const branchHintEn = profile.clashCount > 0
+      ? `The annual branch ${yearPillar.branch} clashes with ${profile.clashCount} natal positions, so change is likely to arrive before stability.`
+      : `The annual branch ${yearPillar.branch} has few clash points in your natal chart, which favors a steady long-term route.`;
+    return `Your personal bridge to the year's larger trend is "${relation}" between your Day Master and the annual stem ${yearPillar.stem}. ${branchHintEn} In Zi Wei terms, your life palace falls in ${profile.ziwei.mingPalace} with a ${profile.ziwei.style} style, while the I Ching clue is ${profile.iching.clue}. You can amplify results through your stronger ${lifeAnalysis.dominant} side, but the weaker ${lifeAnalysis.weak} side must remain the stabilizer.`;
+  }
   return `你的个人流年与大势连接点是“${relation}”（日主对流年天干${yearPillar.stem}）。${branchHint} 紫微侧看命宫落${profile.ziwei.mingPalace}、风格偏${profile.ziwei.style}；易经线索为${profile.iching.clue}。你在${lifeAnalysis.dominant}相关能力上更容易放大成果，但要用${lifeAnalysis.weak}做稳定器，避免高开低走。`;
 }
 
@@ -762,6 +983,55 @@ function buildCareerText(relation, strengthHint, lifeAnalysis, profile) {
     "建议以“一个核心战场 + 两个辅助抓手”配置精力。"
   ]);
   const ziweiHint = `紫微官禄位落${profile.ziwei.careerPalace}，显示你今年更适合${profile.ziwei.style === "开创型" || profile.ziwei.style === "统筹型" ? "承担主导型角色" : "以专业深耕取胜"}。`;
+  if (isEnglish()) {
+    const baseEn = {
+      比和: seededChoice(profile, "career-base-en", [
+        "Career this year favors coordination and leverage. The better you integrate people and resources, the more visible the outcome.",
+        "Your work path this year is strongest when you combine separate strengths into a complete solution."
+      ]),
+      泄秀: seededChoice(profile, "career-output-en", [
+        "This is an output year. Public expression, visible work, and presentation quality directly influence opportunity flow.",
+        "Career momentum comes from being seen. Turning skill into visible proof speeds things up."
+      ]),
+      生扶: seededChoice(profile, "career-support-en", [
+        "Supportive people and platforms are easier to access this year, so key projects are worth pursuing.",
+        "This year has a clear uplift pattern. Mentors and strong platforms can raise your ceiling."
+      ]),
+      克财: seededChoice(profile, "career-wealth-en", [
+        "This is a results-driven year. High targets and measurable outcomes will define how you are judged.",
+        "You are more visible in demanding situations, but overextension becomes the main risk."
+      ]),
+      受制: seededChoice(profile, "career-pressure-en", [
+        "Career friction this year comes from structure and process, so staged progress is safer than brute force.",
+        "In systems with stronger constraints, disciplined pacing works better than pushing too hard."
+      ])
+    }[relation];
+    const modeHintEn = lifeAnalysis.outputPower >= 2
+      ? seededChoice(profile, "career-mode-strong-en", [
+        "Your output star is strong, which suits public-facing delivery, business expansion, and visible execution.",
+        "A strong output signature means communication plus execution can become your edge."
+      ])
+      : seededChoice(profile, "career-mode-weak-en", [
+        "Your output rhythm is more cautious, so depth before exposure is the better route.",
+        "Build reusable methods first, then scale your presence."
+      ]);
+    const changeHintEn = profile.clashCount > 0
+      ? seededChoice(profile, "career-change-en", [
+        "Because annual clash signals are active, role shifts, team change, or partnership reshuffling are more likely. Keep a second plan ready.",
+        "This year carries obvious movement, so your career path needs a main plan and a backup plan."
+      ])
+      : seededChoice(profile, "career-stable-en", [
+        "The annual structure is steadier, which favors deepening your position and lifting your bargaining power step by step.",
+        "Stability is better this year, so staying in one lane and compounding your leverage works well."
+      ]);
+    const focusHintEn = seededChoice(profile, "career-focus-en", [
+      "Use a main-track goal with quarterly reviews.",
+      "Run on quarterly themes with weekly execution metrics.",
+      "Place your energy into one main battlefield plus two supporting levers."
+    ]);
+    const ziweiHintEn = `Zi Wei places your career palace in ${profile.ziwei.careerPalace}, suggesting that this year works best when you ${profile.ziwei.style === "开创型" || profile.ziwei.style === "统筹型" ? "take a leading role" : "win through specialist depth"}.`;
+    return `${baseEn} ${modeHintEn} ${changeHintEn} ${ziweiHintEn} Your Day Master is ${strengthHint}, with stronger ${lifeAnalysis.dominant} and lighter ${lifeAnalysis.weak}. ${focusHintEn}`;
+  }
   return `${base} ${modeHint}${changeHint} ${ziweiHint} 命局日主${strengthHint}，当前${lifeAnalysis.dominant}偏旺、${lifeAnalysis.weak}偏弱，${focusHint}`;
 }
 
@@ -793,6 +1063,43 @@ function buildLoveText(relation, gender, lifeAnalysis, profile) {
     `今年关系经营关键在“先确认再推进”，避免用想象代替共识。`
   ]);
   const ziweiHint = `紫微夫妻位在${profile.ziwei.relationPalace}，关系经营宜${profile.ziwei.style === "感知型" ? "先共情后结论" : "先对齐边界再推进承诺"}。`;
+  if (isEnglish()) {
+    const genderHintEn = gender === "male"
+      ? "From a male perspective, taking visible action builds safety faster this year."
+      : gender === "female"
+        ? "From a female perspective, clearer boundaries and pacing reduce emotional drag this year."
+        : "";
+    const relationHintEn = relation === "比和"
+      ? seededChoice(profile, "love-rel-en", [
+        "Relationships this year depend on shared values and compatible rhythm.",
+        "Emotional stability comes more from alignment than from intensity."
+      ])
+      : relation === "生扶"
+        ? seededChoice(profile, "love-support-en", [
+          "It is easier to meet someone who actively supports your growth.",
+          "This year favors mutually supportive relationship dynamics."
+        ])
+        : seededChoice(profile, "love-risk-en", [
+          "Relationship friction is more likely to come from unclear communication than from lack of feeling.",
+          "Say the need directly. Guesswork will cost more this year."
+        ]);
+    const branchHintEn = profile.dayBranchClashed
+      ? seededChoice(profile, "love-clash-en", [
+        "Because the relationship sector is being stirred by the annual flow, timing conflicts, distance, or renegotiation of roles can surface.",
+        "The annual clash touches the partnership axis, so the relationship may need new rules."
+      ])
+      : seededChoice(profile, "love-steady-en", [
+        "The relationship sector is relatively stable, which supports deeper commitment through shared plans.",
+        "Stability is better here, so long-term planning can strengthen intimacy."
+      ]);
+    const styleHintEn = seededChoice(profile, "love-style-en", [
+      "Your stronger element can make expression more direct, so leave room for the other person's response.",
+      "You tend to move quickly in relationships, so deliberate pacing will help.",
+      "This year works better when confirmation comes before commitment."
+    ]);
+    const ziweiHintEn = `Zi Wei places the partnership palace in ${profile.ziwei.relationPalace}, so relationship management works best when you ${profile.ziwei.style === "感知型" ? "lead with empathy before conclusions" : "align boundaries before promises"}.`;
+    return `${relationHintEn} ${genderHintEn} ${branchHintEn} ${styleHintEn} ${ziweiHintEn}`;
+  }
   return `${relationHint}${genderHint} ${branchHint} ${styleHint} ${ziweiHint}`;
 }
 
@@ -816,6 +1123,27 @@ function buildHealthText(lifeAnalysis, profile) {
     "建议建立“睡眠-饮食-运动”三项周追踪。"
   ]);
   const yiHint = `易经${profile.iching.baseGua}转${profile.iching.changedGua}，提示“节律比强度更重要”。`;
+  if (isEnglish()) {
+    const seasonHintEn = lifeAnalysis.monthElement === lifeAnalysis.weak
+      ? "The month command also falls on your weaker element, so that system is more sensitive around seasonal transitions."
+      : `The month command is ${lifeAnalysis.monthElement}, so recovery potential is better than a full overlap with the weaker side.`;
+    const stressHintEn = profile.clashCount >= 2
+      ? seededChoice(profile, "health-stress-high-en", [
+        "Annual clash signals are active, so stress-based insomnia and emotional swings deserve attention.",
+        "Change pressure is high this year, so nervous system recovery and sleep rhythm matter more."
+      ])
+      : seededChoice(profile, "health-stress-low-en", [
+        "Annual clash signals are lighter, so the main task is keeping a stable routine.",
+        "Pressure is more manageable, and consistency matters more than intensity."
+      ]);
+    const actHintEn = seededChoice(profile, "health-action-en", [
+      "Review health indicators every quarter.",
+      "Track sleep, food, and movement every week.",
+      "Recheck stamina and sleep data every three months."
+    ]);
+    const yiHintEn = `The I Ching shift from ${profile.iching.baseGua} to ${profile.iching.changedGua} suggests that rhythm matters more than intensity.`;
+    return `This year, pay closest attention to ${map[lifeAnalysis.weak]}, your relatively weaker zone, while ${map[lifeAnalysis.dominant]} is the overload-prone zone. ${seasonHintEn} ${stressHintEn} ${actHintEn} ${yiHintEn}`;
+  }
   return `今年重点关注${map[lifeAnalysis.weak]}，这是你的相对薄弱位；${map[lifeAnalysis.dominant]}属于易过载位。${seasonHint}${stressHint} ${actHint} ${yiHint}`;
 }
 
@@ -853,6 +1181,47 @@ function buildWealthText(relation, lifeAnalysis, profile) {
     "保持分散配置，优先守住本金安全。"
   ]);
   const ziweiHint = `紫微财帛位落${profile.ziwei.wealthPalace}，资金策略宜${profile.ziwei.style === "稳健型" || profile.ziwei.style === "务实型" ? "稳健滚动" : "主业现金流+小比例进攻"}。`;
+  if (isEnglish()) {
+    const textEn = relation === "克财"
+      ? seededChoice(profile, "wealth-base-en", [
+        "Financial upside comes from high-responsibility work, but volatility rises with it.",
+        "The larger money windows come through pressure and accountability, with bigger swings attached."
+      ])
+      : relation === "生扶"
+        ? seededChoice(profile, "wealth-growth-en", [
+          "Financial growth looks steadier, and income is more likely to rise through stronger primary skills.",
+          "This is a steadier money year, with the main engine being career competence."
+        ])
+        : seededChoice(profile, "wealth-slow-en", [
+          "Finance should move steadily first. Protect cash flow before chasing yield.",
+          "This is not a year to rush. Budget discipline comes before return targets."
+        ]);
+    const wealthHintEn = lifeAnalysis.wealthPower >= 2
+      ? seededChoice(profile, "wealth-power-strong-en", [
+        "Your money star base is solid, so negotiation, conversion, and resource combination can lift income.",
+        "Your chart can support stronger monetization if the structure is clear."
+      ])
+      : seededChoice(profile, "wealth-power-weak-en", [
+        "Your money star relies more on stable realization, so cash flow and debt control matter most.",
+        "The money side is more conservative, so safety buffers should come first."
+      ]);
+    const nameHintEn = profile.nameSupportsWeak
+      ? seededChoice(profile, "wealth-name-support-en", [
+        `Your name supports the weaker ${lifeAnalysis.weak} side, which helps patience and steadiness in financial decisions.`,
+        `The name adds some support to ${lifeAnalysis.weak}, making budgeting discipline easier to maintain.`
+      ])
+      : seededChoice(profile, "wealth-name-nosupport-en", [
+        `Your name does not clearly support the weaker ${lifeAnalysis.weak} side, so financial discipline should rely on hard rules.`,
+        `Because the name gives limited support to ${lifeAnalysis.weak}, written rules matter more in money decisions.`
+      ]);
+    const riskHintEn = seededChoice(profile, "wealth-risk-en", [
+      "Avoid concentrating too much in a single asset.",
+      "Do not place all capital into one project.",
+      "Keep your allocation diversified and protect principal first."
+    ]);
+    const ziweiHintEn = `Zi Wei places the wealth palace in ${profile.ziwei.wealthPalace}, so the better strategy is ${profile.ziwei.style === "稳健型" || profile.ziwei.style === "务实型" ? "steady compounding" : "primary cash flow plus a small offensive allocation"}.`;
+    return `${textEn} ${wealthHintEn} ${nameHintEn} ${ziweiHintEn} ${riskHintEn}`;
+  }
   return `${text} ${wealthHint}${nameHint} ${ziweiHint} ${riskHint}`;
 }
 
@@ -880,6 +1249,36 @@ function buildActionSuggestions(dayMaster, lifeAnalysis, profile) {
     `五行补益：日常穿搭、配饰或空间可增加${balancingColor}元素。`,
     `五行补益：本年度可增加${balancingColor}主题元素，强化补弱信号。`
   ]);
+  if (isEnglish()) {
+    const scheduleActionEn = seededChoice(profile, "action-schedule-en", [
+      "Rhythm adjustment: keep a fixed sleep schedule for 90 days, ideally before 11:30 PM.",
+      "Rhythm adjustment: run a 12-week fixed sleep window to rebuild energy stability.",
+      "Rhythm adjustment: lock your wake-up time first, then move bedtime earlier."
+    ]);
+    const workActionEn = seededChoice(profile, "action-work-en", [
+      `Behavioral adjustment: run a weekly review with 3 measurable actions, especially those that strengthen your weaker ${lifeAnalysis.weak} side.`,
+      `Behavioral adjustment: use one main goal plus two key actions each week to patch the weaker ${lifeAnalysis.weak} side.`,
+      `Behavioral adjustment: maintain a weekly task board and prioritize tasks that nourish the weaker ${lifeAnalysis.weak} side.`
+    ]);
+    const envActionEn = seededChoice(profile, "action-env-en", [
+      `Environment adjustment: place your main desk or work area toward the ${luckyDirection} direction when possible.`,
+      `Environment adjustment: orient your core workspace toward ${luckyDirection} to support focus and execution.`
+    ]);
+    const colorActionEn = seededChoice(profile, "action-color-en", [
+      `Element support: add ${balancingColor} tones into clothing, accessories, or your room setup.`,
+      `Element support: use more ${balancingColor} visual accents this year to reinforce the weaker side.`
+    ]);
+    const nameActionEn = profile.nameSupportsWeak
+      ? `Name adjustment: your name already supports ${lifeAnalysis.weak}, so keep that character pattern in social handles or signatures.`
+      : `Name adjustment: your name gives limited support to ${lifeAnalysis.weak}, so consider adding a ${lifeAnalysis.weak}-aligned character to a nickname or brand label.`;
+    return [
+      `${scheduleActionEn} ${profile.clashCount > 0 ? "This year, resilience against fluctuation comes first." : "This year, stability and compounding come first."}`,
+      envActionEn,
+      workActionEn,
+      nameActionEn,
+      colorActionEn
+    ];
+  }
   return [
     `${scheduleAction}${profile.clashCount > 0 ? "今年优先抗波动。" : "今年优先稳态放大。"} `,
     envAction,
@@ -894,6 +1293,13 @@ function buildPsychologyHint(lifeAnalysis, profile) {
   const tip = profile.clashCount > 0
     ? "重大决定前先写下“最坏情境+应对预案”，再执行。"
     : "为每个目标设置明确截止时间，防止无限延期。";
+  if (isEnglish()) {
+    const biasEn = profile.clashCount > 0 ? "emotion-driven decision bias" : "over-cautious decision bias";
+    const tipEn = profile.clashCount > 0
+      ? "Before major decisions, write the worst-case scenario and the response plan first."
+      : "Set explicit deadlines for each goal to prevent endless delay.";
+    return `Psychology note: your most likely risk this year is ${biasEn}. Use a two-step method: record facts first, then judge feelings. ${tipEn}`;
+  }
   return `心理校正：你今年最常见的风险是${bias}。建议采用“先记录事实，再判断感受”的两步法；${tip}`;
 }
 
@@ -1067,10 +1473,10 @@ function updateValidationBadge(validation) {
   validationBadge.classList.remove("ok", "fail");
   if (validation.passed) {
     validationBadge.classList.add("ok");
-    validationBadge.textContent = "算法验证通过";
+    validationBadge.textContent = t("validation.ok");
   } else {
     validationBadge.classList.add("fail");
-    validationBadge.textContent = "算法验证异常";
+    validationBadge.textContent = t("validation.fail");
   }
 }
 
@@ -1080,90 +1486,99 @@ function renderReport(ctx) {
   const { fullName, birth, cityInfo, utcOffset, trueSolarDate, bazi, nameAnalysis, lifeAnalysis, ziweiAnalysis, ichingAnalysis, annual, validation } = ctx;
 
   const ratioBars = ELEMENTS.map((e) => `${e}:${bazi.elementRatio[e]}%`).join(" | ");
-  const nameParts = nameAnalysis.details.map((d) => `${d.char}-${d.element}`).join("，") || "无";
+  const nameParts = nameAnalysis.details.map((d) => `${d.char}-${d.element}`).join(isEnglish() ? ", " : "，") || (isEnglish() ? "N/A" : "无");
+  const countryLabel = COUNTRY_LABELS[currentLocale][birth.country] || birth.country;
+  const headings = getReportHeadings();
+  const validationText = formatValidationText(validation);
+  const ziweiLine = isEnglish()
+    ? `Zi Wei: Life Palace ${translatePalaceName(ziweiAnalysis.mingPalace)}, Career Palace ${translatePalaceName(ziweiAnalysis.careerPalace)}, Wealth Palace ${translatePalaceName(ziweiAnalysis.wealthPalace)}, style ${translateZiweiStyle(ziweiAnalysis.style)}.`
+    : `紫微：命宫落${ziweiAnalysis.mingPalace}，官禄位${ziweiAnalysis.careerPalace}，财帛位${ziweiAnalysis.wealthPalace}，风格偏${ziweiAnalysis.style}。`;
+  const ichingLine = isEnglish()
+    ? `I Ching: ${translateIchingClue(ichingAnalysis)}.`
+    : `易经：${ichingAnalysis.clue}。`;
 
   resultContent.innerHTML = `
-    <p><strong>姓名</strong>：${fullName}</p>
-    <p><strong>出生信息</strong>：${birth.year}-${pad2(birth.month)}-${pad2(birth.day)} ${pad2(birth.hour)}:${pad2(birth.minute)}，${birth.country} ${birth.city}</p>
-    <p><strong>自动时区</strong>：${cityInfo.tz}（${formatUtcOffset(utcOffset)}）</p>
-    <p><strong>真太阳时</strong>：${formatDateTime(trueSolarDate)}</p>
+    <p><strong>${headings.name}</strong>: ${fullName}</p>
+    <p><strong>${headings.birthInfo}</strong>: ${birth.year}-${pad2(birth.month)}-${pad2(birth.day)} ${pad2(birth.hour)}:${pad2(birth.minute)}, ${countryLabel} ${birth.city}</p>
+    <p><strong>${headings.timezone}</strong>: ${cityInfo.tz} (${formatUtcOffset(utcOffset)})</p>
+    <p><strong>${headings.trueSolar}</strong>: ${formatDateTime(trueSolarDate)}</p>
 
     <div class="report-section">
-      <h3>四柱八字</h3>
+      <h3>${headings.pillars}</h3>
       <div class="pillars">
-        <div>年柱：<strong>${bazi.pillars.year.text}</strong></div>
-        <div>月柱：<strong>${bazi.pillars.month.text}</strong></div>
-        <div>日柱：<strong>${bazi.pillars.day.text}</strong></div>
-        <div>时柱：<strong>${bazi.pillars.hour.text}</strong></div>
+        <div>${headings.yearPillar}: <strong>${bazi.pillars.year.text}</strong></div>
+        <div>${headings.monthPillar}: <strong>${bazi.pillars.month.text}</strong></div>
+        <div>${headings.dayPillar}: <strong>${bazi.pillars.day.text}</strong></div>
+        <div>${headings.hourPillar}: <strong>${bazi.pillars.hour.text}</strong></div>
       </div>
-      <p>五行比例：${ratioBars}</p>
+      <p>${headings.elementRatio}: ${ratioBars}</p>
     </div>
 
     <div class="report-section">
-      <h3>命局五行与性格分析</h3>
+      <h3>${headings.lifeAnalysis}</h3>
       <p>${lifeAnalysis.lifeText}</p>
       <p>${lifeAnalysis.personalityText}</p>
     </div>
 
     <div class="report-section">
-      <h3>姓名五行分析</h3>
-      <p>姓名拆解：${nameParts}</p>
+      <h3>${headings.nameAnalysis}</h3>
+      <p>${headings.nameBreakdown}: ${nameParts}</p>
       <p>${nameAnalysis.summary}</p>
       <p>${lifeAnalysis.nameLinkText}</p>
     </div>
 
     <div class="report-section">
-      <h3>紫微与易经辅助线索</h3>
-      <p>紫微：命宫落${ziweiAnalysis.mingPalace}，官禄位${ziweiAnalysis.careerPalace}，财帛位${ziweiAnalysis.wealthPalace}，风格偏${ziweiAnalysis.style}。</p>
-      <p>易经：${ichingAnalysis.clue}。</p>
+      <h3>${headings.auxiliary}</h3>
+      <p>${ziweiLine}</p>
+      <p>${ichingLine}</p>
     </div>
 
     <div class="report-section">
-      <h3>${annual.targetYear} 年整体运势（大势）</h3>
+      <h3>${headings.yearOverview(annual.targetYear)}</h3>
       <p>${annual.yearOverview}</p>
       <p>${annual.personalBridge}</p>
     </div>
 
     <div class="report-section">
-      <h3>个性化推断依据</h3>
+      <h3>${headings.evidence}</h3>
       <ol>${annual.evidencePoints.map((item) => `<li>${item}</li>`).join("")}</ol>
     </div>
 
     <div class="report-section">
-      <h3>事业运</h3>
+      <h3>${headings.career}</h3>
       <p>${annual.career}</p>
     </div>
     <div class="report-section">
-      <h3>爱情运</h3>
+      <h3>${headings.love}</h3>
       <p>${annual.love}</p>
     </div>
     <div class="report-section">
-      <h3>健康运</h3>
+      <h3>${headings.health}</h3>
       <p>${annual.health}</p>
     </div>
     <div class="report-section">
-      <h3>财富运</h3>
+      <h3>${headings.wealth}</h3>
       <p>${annual.wealth}</p>
     </div>
 
     <div class="report-section">
-      <h3>转运操作建议</h3>
+      <h3>${headings.actions}</h3>
       <ol>${annual.actions.map((a) => `<li>${a}</li>`).join("")}</ol>
     </div>
 
     <div class="report-section">
-      <h3>心理决策提示</h3>
+      <h3>${headings.psychology}</h3>
       <p>${annual.psychologyHint}</p>
     </div>
 
     <div class="report-section">
-      <h3>后台算法校验</h3>
-      <p>${validation.text}</p>
+      <h3>${headings.validation}</h3>
+      <p>${validationText}</p>
     </div>
 
     <div class="report-section">
-      <h3>算法说明</h3>
-      <p>八字采用台湾常见子平法口径：立春换年、节气定月、真太阳时校正。姓名五行采用“常见字直映射 + 字符编码兜底”的工程分析法。</p>
+      <h3>${headings.method}</h3>
+      <p>${isEnglish() ? "BaZi calculation follows a practical Four Pillars approach with Li Chun year switch, solar-term month boundaries, and true solar time correction. Name-element reading uses a common-character mapping plus a deterministic fallback rule." : "八字采用台湾常见子平法口径：立春换年、节气定月、真太阳时校正。姓名五行采用“常见字直映射 + 字符编码兜底”的工程分析法。"}</p>
     </div>
   `;
 
@@ -1176,81 +1591,166 @@ function buildPlainTextReport(ctx) {
   const { fullName, birth, cityInfo, utcOffset, trueSolarDate, bazi, nameAnalysis, lifeAnalysis, ziweiAnalysis, ichingAnalysis, annual, validation } = ctx;
   const lines = [];
 
-  lines.push(`【${annual.targetYear} 年个人运势报告】`);
+  const headings = getReportHeadings();
+  const countryLabel = COUNTRY_LABELS[currentLocale][birth.country] || birth.country;
+  const validationText = formatValidationText(validation);
+  lines.push(isEnglish() ? `[${annual.targetYear} Personal Fortune Report]` : `【${annual.targetYear} 年个人运势报告】`);
   lines.push("");
-  lines.push(`姓名：${fullName}`);
-  lines.push(`出生信息：${birth.year}-${pad2(birth.month)}-${pad2(birth.day)} ${pad2(birth.hour)}:${pad2(birth.minute)}，${birth.country} ${birth.city}`);
-  lines.push(`自动时区：${cityInfo.tz}（${formatUtcOffset(utcOffset)}）`);
-  lines.push(`真太阳时：${formatDateTime(trueSolarDate)}`);
-  lines.push("");
-
-  lines.push("四柱八字：");
-  lines.push(`年柱 ${bazi.pillars.year.text} | 月柱 ${bazi.pillars.month.text} | 日柱 ${bazi.pillars.day.text} | 时柱 ${bazi.pillars.hour.text}`);
-  lines.push(`五行比例：木 ${bazi.elementRatio["木"]}% / 火 ${bazi.elementRatio["火"]}% / 土 ${bazi.elementRatio["土"]}% / 金 ${bazi.elementRatio["金"]}% / 水 ${bazi.elementRatio["水"]}%`);
+  lines.push(`${headings.name}: ${fullName}`);
+  lines.push(`${headings.birthInfo}: ${birth.year}-${pad2(birth.month)}-${pad2(birth.day)} ${pad2(birth.hour)}:${pad2(birth.minute)}, ${countryLabel} ${birth.city}`);
+  lines.push(`${headings.timezone}: ${cityInfo.tz} (${formatUtcOffset(utcOffset)})`);
+  lines.push(`${headings.trueSolar}: ${formatDateTime(trueSolarDate)}`);
   lines.push("");
 
-  lines.push("命局五行与性格分析：");
+  lines.push(`${headings.pillars}:`);
+  lines.push(`${headings.yearPillar} ${bazi.pillars.year.text} | ${headings.monthPillar} ${bazi.pillars.month.text} | ${headings.dayPillar} ${bazi.pillars.day.text} | ${headings.hourPillar} ${bazi.pillars.hour.text}`);
+  lines.push(`${headings.elementRatio}: Wood ${bazi.elementRatio["木"]}% / Fire ${bazi.elementRatio["火"]}% / Earth ${bazi.elementRatio["土"]}% / Metal ${bazi.elementRatio["金"]}% / Water ${bazi.elementRatio["水"]}%`);
+  lines.push("");
+
+  lines.push(`${headings.lifeAnalysis}:`);
   lines.push(lifeAnalysis.lifeText);
   lines.push(lifeAnalysis.personalityText);
   lines.push("");
 
-  lines.push("姓名五行分析：");
-  lines.push(`姓名拆解：${nameAnalysis.details.map((d) => `${d.char}-${d.element}`).join("，") || "无"}`);
+  lines.push(`${headings.nameAnalysis}:`);
+  lines.push(`${headings.nameBreakdown}: ${nameAnalysis.details.map((d) => `${d.char}-${d.element}`).join(isEnglish() ? ", " : "，") || (isEnglish() ? "N/A" : "无")}`);
   lines.push(nameAnalysis.summary);
   lines.push(lifeAnalysis.nameLinkText);
   lines.push("");
 
-  lines.push("紫微与易经辅助线索：");
-  lines.push(`紫微：命宫${ziweiAnalysis.mingPalace}，官禄位${ziweiAnalysis.careerPalace}，财帛位${ziweiAnalysis.wealthPalace}，风格${ziweiAnalysis.style}。`);
-  lines.push(`易经：${ichingAnalysis.clue}。`);
+  lines.push(`${headings.auxiliary}:`);
+  lines.push(isEnglish()
+    ? `Zi Wei: Life Palace ${translatePalaceName(ziweiAnalysis.mingPalace)}, Career Palace ${translatePalaceName(ziweiAnalysis.careerPalace)}, Wealth Palace ${translatePalaceName(ziweiAnalysis.wealthPalace)}, style ${translateZiweiStyle(ziweiAnalysis.style)}.`
+    : `紫微：命宫${ziweiAnalysis.mingPalace}，官禄位${ziweiAnalysis.careerPalace}，财帛位${ziweiAnalysis.wealthPalace}，风格${ziweiAnalysis.style}。`);
+  lines.push(isEnglish() ? `I Ching: ${translateIchingClue(ichingAnalysis)}.` : `易经：${ichingAnalysis.clue}。`);
   lines.push("");
 
-  lines.push(`${annual.targetYear} 年整体运势（大势）：`);
+  lines.push(`${headings.yearOverview(annual.targetYear)}:`);
   lines.push(annual.yearOverview);
   lines.push(annual.personalBridge);
   lines.push("");
 
-  lines.push("个性化推断依据：");
+  lines.push(`${headings.evidence}:`);
   annual.evidencePoints.forEach((item, idx) => lines.push(`${idx + 1}. ${item}`));
   lines.push("");
 
-  lines.push("事业运：");
+  lines.push(`${headings.career}:`);
   lines.push(annual.career);
   lines.push("");
 
-  lines.push("爱情运：");
+  lines.push(`${headings.love}:`);
   lines.push(annual.love);
   lines.push("");
 
-  lines.push("健康运：");
+  lines.push(`${headings.health}:`);
   lines.push(annual.health);
   lines.push("");
 
-  lines.push("财富运：");
+  lines.push(`${headings.wealth}:`);
   lines.push(annual.wealth);
   lines.push("");
 
-  lines.push("转运操作建议：");
+  lines.push(`${headings.actions}:`);
   annual.actions.forEach((item, idx) => lines.push(`${idx + 1}. ${item}`));
   lines.push("");
 
-  lines.push("心理决策提示：");
+  lines.push(`${headings.psychology}:`);
   lines.push(annual.psychologyHint);
   lines.push("");
 
-  lines.push("后台算法校验：");
-  lines.push(validation.text);
+  lines.push(`${headings.validation}:`);
+  lines.push(validationText);
   lines.push("");
 
-  lines.push("算法说明：八字采用台湾常见子平法口径（立春换年、节气定月、真太阳时）。");
-  lines.push("免责声明：本报告用于参考，不替代医疗、法律、金融等专业意见。");
+  lines.push(`${headings.method}: ${isEnglish() ? "BaZi calculation follows Li Chun year switch, solar-term month boundaries, and true solar time correction." : "八字采用台湾常见子平法口径（立春换年、节气定月、真太阳时）。"}`);
+  lines.push(isEnglish() ? "Disclaimer: This report is for reflection and planning only. It does not replace medical, legal, or financial advice." : "免责声明：本报告用于参考，不替代医疗、法律、金融等专业意见。");
 
   return lines.join("\n");
 }
 
+function getReportHeadings() {
+  if (isEnglish()) {
+    return {
+      name: "Name",
+      birthInfo: "Birth Information",
+      timezone: "Timezone",
+      trueSolar: "True Solar Time",
+      pillars: "Four Pillars",
+      yearPillar: "Year Pillar",
+      monthPillar: "Month Pillar",
+      dayPillar: "Day Pillar",
+      hourPillar: "Hour Pillar",
+      elementRatio: "Five-Element Ratio",
+      lifeAnalysis: "Elemental And Personality Analysis",
+      nameAnalysis: "Name Element Analysis",
+      nameBreakdown: "Name Breakdown",
+      auxiliary: "Zi Wei And I Ching Signals",
+      yearOverview: (y) => `${y} Annual Overview`,
+      evidence: "Reasoning Evidence",
+      career: "Career",
+      love: "Love",
+      health: "Health",
+      wealth: "Wealth",
+      actions: "Adjustment Suggestions",
+      psychology: "Psychology Note",
+      validation: "Engine Validation",
+      method: "Method"
+    };
+  }
+  return {
+    name: "姓名",
+    birthInfo: "出生信息",
+    timezone: "自动时区",
+    trueSolar: "真太阳时",
+    pillars: "四柱八字",
+    yearPillar: "年柱",
+    monthPillar: "月柱",
+    dayPillar: "日柱",
+    hourPillar: "时柱",
+    elementRatio: "五行比例",
+    lifeAnalysis: "命局五行与性格分析",
+    nameAnalysis: "姓名五行分析",
+    nameBreakdown: "姓名拆解",
+    auxiliary: "紫微与易经辅助线索",
+    yearOverview: (y) => `${y} 年整体运势（大势）`,
+    evidence: "个性化推断依据",
+    career: "事业运",
+    love: "爱情运",
+    health: "健康运",
+    wealth: "财富运",
+    actions: "转运操作建议",
+    psychology: "心理决策提示",
+    validation: "后台算法校验",
+    method: "算法说明"
+  };
+}
+
+function formatValidationText(validation) {
+  if (isEnglish()) {
+    return validation.passed
+      ? "Passed 6 engine checks: Li Chun year switch, solar-term month boundary, day pillar continuity, hour pillar boundary, sexagenary uniqueness, and personalization diversity."
+      : `Validation did not fully pass: ${validation.failed.join(", ")}`;
+  }
+  return validation.text;
+}
+
+function translatePalaceName(name) {
+  const map = { "命宫": "Life Palace", "兄弟": "Siblings", "夫妻": "Partnership", "子女": "Children", "财帛": "Wealth", "疾厄": "Health", "迁移": "Travel", "仆役": "Network", "官禄": "Career", "田宅": "Property", "福德": "Fortune", "父母": "Parents" };
+  return map[name] || name;
+}
+
+function translateZiweiStyle(style) {
+  const map = { "开创型": "initiating", "稳健型": "steady", "机巧型": "adaptive", "统筹型": "coordinating", "感知型": "sensitive", "务实型": "practical" };
+  return map[style] || style;
+}
+
+function translateIchingClue(ichingAnalysis) {
+  return `base hexagram ${ichingAnalysis.baseGua}, changing to ${ichingAnalysis.changedGua}, moving line ${ichingAnalysis.movingLine}`;
+}
+
 function drawFateCanvas(ctx) {
   if (!fateCanvas) return "";
-  const { fullName, birth, bazi, ziweiAnalysis, ichingAnalysis, annual } = ctx;
+  const { fullName, bazi, ziweiAnalysis, ichingAnalysis, annual } = ctx;
   const c = fateCanvas;
   const g = c.getContext("2d");
   if (!g) return "";
@@ -1259,31 +1759,50 @@ function drawFateCanvas(ctx) {
   g.fillRect(0, 0, c.width, c.height);
   g.fillStyle = "#2f2012";
   g.font = "bold 34px serif";
-  g.fillText("易经命盘图", 34, 54);
+  g.fillText(isEnglish() ? "I Ching Fate Chart" : "易经命盘图", 34, 54);
   g.font = "20px serif";
-  g.fillText(`${fullName} · ${annual.targetYear} 年运势`, 36, 86);
+  g.fillText(isEnglish() ? `${fullName} · ${annual.targetYear} Annual Reading` : `${fullName} · ${annual.targetYear} 年运势`, 36, 86);
 
   g.strokeStyle = "#8b6438";
   g.lineWidth = 2;
   g.strokeRect(24, 22, c.width - 48, c.height - 44);
   g.strokeRect(34, 32, c.width - 68, c.height - 64);
 
-  drawPillarBlock(g, 40, 120, "年柱", bazi.pillars.year.text);
-  drawPillarBlock(g, 290, 120, "月柱", bazi.pillars.month.text);
-  drawPillarBlock(g, 540, 120, "日柱", bazi.pillars.day.text);
-  drawPillarBlock(g, 790, 120, "时柱", bazi.pillars.hour.text);
+  drawPillarBlock(g, 40, 120, isEnglish() ? "Year" : "年柱", bazi.pillars.year.text);
+  drawPillarBlock(g, 290, 120, isEnglish() ? "Month" : "月柱", bazi.pillars.month.text);
+  drawPillarBlock(g, 540, 120, isEnglish() ? "Day" : "日柱", bazi.pillars.day.text);
+  drawPillarBlock(g, 790, 120, isEnglish() ? "Hour" : "时柱", bazi.pillars.hour.text);
 
   g.font = "18px serif";
   g.fillStyle = "#3d2a18";
-  g.fillText(`命宫：${ziweiAnalysis.mingPalace}  官禄：${ziweiAnalysis.careerPalace}  财帛：${ziweiAnalysis.wealthPalace}`, 42, 278);
-  g.fillText(`易经：${ichingAnalysis.baseGua} -> ${ichingAnalysis.changedGua}  动爻：第${ichingAnalysis.movingLine}爻`, 42, 310);
-  g.fillText(`流年：${annual.annualPillar.text}  关系：${annual.relation}`, 42, 342);
+  g.fillText(
+    isEnglish()
+      ? `Life: ${translatePalaceName(ziweiAnalysis.mingPalace)}  Career: ${translatePalaceName(ziweiAnalysis.careerPalace)}  Wealth: ${translatePalaceName(ziweiAnalysis.wealthPalace)}`
+      : `命宫：${ziweiAnalysis.mingPalace}  官禄：${ziweiAnalysis.careerPalace}  财帛：${ziweiAnalysis.wealthPalace}`,
+    42,
+    278
+  );
+  g.fillText(
+    isEnglish()
+      ? `I Ching: ${ichingAnalysis.baseGua} -> ${ichingAnalysis.changedGua}  Moving line: ${ichingAnalysis.movingLine}`
+      : `易经：${ichingAnalysis.baseGua} -> ${ichingAnalysis.changedGua}  动爻：第${ichingAnalysis.movingLine}爻`,
+    42,
+    310
+  );
+  g.fillText(isEnglish() ? `Annual pillar: ${annual.annualPillar.text}  Relation: ${annual.relation}` : `流年：${annual.annualPillar.text}  关系：${annual.relation}`, 42, 342);
 
   drawZiweiWheel(g, 60, 390, 420, 230, ziweiAnalysis);
+  drawBaguaMotif(g, 830, 496, 108);
 
   g.fillStyle = "#4d351d";
   g.font = "16px serif";
-  g.fillText("心理提示：以上解读用于自我观察与计划管理，请结合现实信息做决策。", 520, 642);
+  g.fillText(
+    isEnglish()
+      ? "Note: Use this reading for reflection and planning, then decide with real-world facts."
+      : "心理提示：以上解读用于自我观察与计划管理，请结合现实信息做决策。",
+    520,
+    642
+  );
 
   return c.toDataURL("image/png");
 }
@@ -1319,13 +1838,43 @@ function drawZiweiWheel(g, x, y, w, h, ziwei) {
     for (let c = 0; c < cols; c += 1) {
       const idx = r * cols + c;
       g.strokeRect(x + c * cw, y + r * rh, cw, rh);
-      const name = ZIWEI_PALACES[idx];
+      const name = isEnglish() ? translatePalaceName(ZIWEI_PALACES[idx]) : ZIWEI_PALACES[idx];
       g.fillText(name, x + c * cw + 8, y + r * rh + 24);
-      if (idx === ziwei.mingIndex) g.fillText("命主", x + c * cw + 8, y + r * rh + 48);
-      if (idx === ziwei.careerIndex) g.fillText("官禄", x + c * cw + 8, y + r * rh + 66);
-      if (idx === ziwei.wealthIndex) g.fillText("财帛", x + c * cw + 8, y + r * rh + 84);
+      if (idx === ziwei.mingIndex) g.fillText(isEnglish() ? "Life" : "命主", x + c * cw + 8, y + r * rh + 48);
+      if (idx === ziwei.careerIndex) g.fillText(isEnglish() ? "Career" : "官禄", x + c * cw + 8, y + r * rh + 66);
+      if (idx === ziwei.wealthIndex) g.fillText(isEnglish() ? "Wealth" : "财帛", x + c * cw + 8, y + r * rh + 84);
     }
   }
+}
+
+function drawBaguaMotif(g, cx, cy, radius) {
+  g.save();
+  g.translate(cx, cy);
+  g.strokeStyle = "rgba(139, 42, 34, 0.5)";
+  g.lineWidth = 1.2;
+  for (let i = 0; i < 8; i += 1) {
+    g.save();
+    g.rotate((Math.PI / 4) * i);
+    for (let j = 0; j < 3; j += 1) {
+      const y = -radius + 18 + j * 12;
+      g.beginPath();
+      if ((i + j) % 2 === 0) {
+        g.moveTo(-24, y);
+        g.lineTo(24, y);
+      } else {
+        g.moveTo(-24, y);
+        g.lineTo(-6, y);
+        g.moveTo(6, y);
+        g.lineTo(24, y);
+      }
+      g.stroke();
+    }
+    g.restore();
+  }
+  g.beginPath();
+  g.arc(0, 0, radius * 0.52, 0, Math.PI * 2);
+  g.stroke();
+  g.restore();
 }
 
 async function generateAiEnhancedText(ctx, apiKey) {

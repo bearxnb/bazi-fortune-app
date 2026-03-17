@@ -8,73 +8,95 @@
 </head>
 <body>
   <main class="page">
-    <section class="card">
-      <h1>AI 易经八字年度运势</h1>
-      <p class="subtitle">输入出生信息，自动计算真太阳时与四柱八字，生成今年运势报告。</p>
+    <section class="hero card">
+      <div class="topbar">
+        <div class="hero-mark">
+          <div class="bagua-seal" aria-hidden="true"></div>
+          <div>
+            <p class="eyebrow" id="hero-eyebrow">周易 · 八字 · 流年</p>
+            <h1 id="page-title">AI 易经八字年度运势</h1>
+          </div>
+        </div>
+        <button id="lang-toggle" class="lang-toggle" type="button">English</button>
+      </div>
+      <p class="subtitle" id="page-subtitle">输入出生信息，自动计算真太阳时与四柱八字，生成今年运势报告。</p>
+      <div class="intro-panel">
+        <div class="intro-copy">
+          <h2 id="intro-title">易经八字的历史与原理</h2>
+          <p id="intro-p1">《易经》源于先秦的卜筮传统，后世结合天干地支、阴阳五行与节气历法，逐渐形成四柱八字这一套观察时间与人格节律的方法。</p>
+          <p id="intro-p2">八字以出生年、月、日、时构成四柱，通过日主强弱、五行流转、岁运变化来解释个人的倾向、节奏与阶段性主题。本页面采用节气定月、立春换年与真太阳时校正的工程化排盘思路。</p>
+        </div>
+        <div class="intro-diagram" aria-hidden="true">
+          <div class="bagua-ring"></div>
+          <div class="taiji"></div>
+        </div>
+      </div>
+    </section>
 
+    <section class="card">
       <form id="fortune-form">
         <div class="grid">
           <label>
-            姓名
+            <span id="label-full-name">姓名</span>
             <input id="full-name" type="text" maxlength="20" placeholder="请输入姓名" required>
           </label>
 
           <label>
-            出生日期
+            <span id="label-birth-date">出生日期</span>
             <input id="birth-date" type="date" required>
           </label>
 
           <label>
-            出生时间
+            <span id="label-birth-time">出生时间</span>
             <input id="birth-time" type="time" required>
           </label>
 
           <label>
-            出生国家
+            <span id="label-country">出生国家</span>
             <select id="country" required></select>
           </label>
 
           <label>
-            出生城市
+            <span id="label-city">出生城市</span>
             <select id="city" required></select>
           </label>
 
           <label>
-            时区（自动）
+            <span id="label-timezone">时区（自动）</span>
             <input id="timezone" type="text" readonly>
           </label>
 
           <label>
-            经度（自动）
+            <span id="label-longitude">经度（自动）</span>
             <input id="longitude" type="text" readonly>
           </label>
 
           <label>
-            纬度（自动）
+            <span id="label-latitude">纬度（自动）</span>
             <input id="latitude" type="text" readonly>
           </label>
 
           <label>
-            性别（可选）
+            <span id="label-gender">性别（可选）</span>
             <select id="gender">
-              <option value="">不填写</option>
-              <option value="male">男</option>
-              <option value="female">女</option>
+              <option value="" id="gender-empty">不填写</option>
+              <option value="male" id="gender-male">男</option>
+              <option value="female" id="gender-female">女</option>
             </select>
           </label>
 
           <label class="full-row">
-            OpenAI API Key（可选，本地直连）
+            <span id="label-api-key">OpenAI API Key（可选，本地直连）</span>
             <input id="openai-key" type="password" placeholder="sk-...">
           </label>
         </div>
 
-        <button type="submit">生成我的今年运势</button>
+        <button id="submit-button" type="submit">生成我的今年运势</button>
       </form>
     </section>
 
     <section class="card hidden" id="result-card">
-      <h2>年度运势报告</h2>
+      <h2 id="result-title">年度运势报告</h2>
       <div class="report-actions">
         <button id="copy-report" type="button">复制纯文本报告</button>
         <button id="download-chart" type="button">下载命盘图</button>
@@ -85,7 +107,7 @@
       </section>
       <article id="result-content"></article>
       <section class="report-section hidden" id="ai-section">
-        <h3>AI 增强解读</h3>
+        <h3 id="ai-title">AI 增强解读</h3>
         <p id="ai-content"></p>
       </section>
     </section>
